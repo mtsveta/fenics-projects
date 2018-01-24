@@ -79,7 +79,9 @@ def create_decay_tag(test_params, project_path, results_folder, results_info):
     return decay_result_folder
 
 def document_errors_decay(dim, test_params, decay_result_folder,
-                          dofs_array, h_min_array, e_array, e_l2_array, maj_array, min_array, i_eff):
+                          dofs_array, h_min_array,
+                          e_array, e_l2_array, maj_array, min_array, i_eff,
+                          e_L_array, e_id_array):
 
     #output_decay_errorr_summary(test_params, dim, p, dofs_array, h_min_array, e_array, e_l2_array, e_linf_array)
 
@@ -89,9 +91,9 @@ def document_errors_decay(dim, test_params, decay_result_folder,
             plot_decay_error_estimates_dofs(dim, float(test_params["v_approx_order"]),
                                             dofs_array, h_min_array, e_array, maj_array, min_array,
                                             decay_result_folder)
-        #output_decay_error_estimates_summary(test_params, dim, float(test_params["v_approx_order"]),
-        #                                    dofs_array, h_min_array, e_array, maj_array, min_array)
-        output_error_estimates_summary(dofs_array, e_array, maj_array, min_array, i_eff)
+        output_decay_error_estimates_identity_summary(test_params, dim, float(test_params["v_approx_order"]),
+                                                      dofs_array, h_min_array, e_array, maj_array, e_L_array, e_id_array)
+        output_error_estimates_summary(dofs_array, e_array, maj_array, min_array, i_eff, e_L_array, e_id_array)
     # Output errors
     #if test_params["PLOT"] == True:
         #plot_decay_error_dofs(dim, float(test_params["v_approx_order"]), dofs_array, h_min_array, e_array, e_l2_array, e_linf_array,
@@ -375,106 +377,41 @@ def plot_function_3d(mesh, f, result_path):
 # Loggin function
 # -------------------------------------------------------------------------------------------------------------------- #
 
-def output_decay_error_estimates_summary(test_params, d, p, N, h, error, majorant, minorant):
+def output_decay_error_estimates_identity_summary(test_params, d, p, N, h, error, majorant, e_L, e_Id):
 
     print '%------------------------------------------------------------------------------------%'
     print "% Rate of convergence summary"
     print '%------------------------------------------------------------------------------------%\n'
 
-    print '       N &      [e] & r([e]) &      maj & r(maj) &      min & r(min) \\\\'
+    print '       N &      [e] & r([e]) &      maj & r(maj) &      e_L    &  e_Id     & r(Id) \\\\'
     print '-------------------------------------------------------------------------------'
 
     for i in range(0, len(h) - 1):
+
         h_i = 1 / (N[i] ** (1.0 / d))
         h_ip1 = 1 / (N[i + 1] ** (1.0 / d))
 
         maj_i = majorant[i]
         maj_ip1 = majorant[i + 1]
 
-        min_i = minorant[i]
-        min_ip1 = minorant[i + 1]
+        e_Id_i = e_Id[i]
+        e_Id_ip1 = e_Id[i + 1]
 
         e_i = error[i]
         e_ip1 = error[i + 1]
 
+        e_L_i = e_L[i]
+        e_L_ip1 = e_L[i + 1]
+
         rate_maj = ln(maj_ip1 / maj_i) / ln(h_ip1 / h_i)
-        rate_min = ln(min_ip1 / min_i) / ln(h_ip1 / h_i)
-        rate_e = ln(e_ip1 / min_i) / ln(h_ip1 / h_i)
+        rate_e_Id = ln(e_Id_ip1 / e_Id_i) / ln(h_ip1 / h_i)
+        rate_e = ln(e_ip1 / e_i) / ln(h_ip1 / h_i)
 
-        print ' %6d & %8.2e & %6.2f & %8.2e & %6.2f & %8.2e & %6.2f \\\\' \
-              % (N[i], e_i, rate_e, maj_i, rate_maj, min_i, rate_min)
+        print ' %6d & %8.2e & %6.2f & %8.2e & %6.2f & %8.2e & %8.2e & %6.2f \\\\' \
+              % (N[i], e_i, rate_e, maj_i, rate_maj, e_L_i, e_Id_i, rate_e_Id)
     print ""
 
-    print "Chen paper: |ln(e) / ln(N)| = 1 indicates second convergence rate"
-    print '        N &      [e] & ln([e])/ln(N) &      maj & r(maj) &      min & r(min) \\\\'
-    print '-------------------------------------------------------------------------------'
 
-    for i in range(0, len(h) - 1):
-        maj_i = majorant[i]
-        min_i = minorant[i]
-        e_i = error[i]
-
-        rate_maj = abs(ln(maj_i) / ln(N[i]))
-        rate_min = abs(ln(min_i) / ln(N[i]))
-        rate_e   = abs(ln(e_i)   / ln(N[i]))
-
-        print ' %8.2e & %8.2e & %8.2f & %8.2e & %6.2f & %8.2e & %6.2f \\\\' \
-              % (N[i], e_i, rate_e, maj_i, rate_maj, min_i, rate_min)
-    print ""
-
-    # Convergence rate in the adaptive refinement doesn't make sense wrt h
-    if test_params["refinement_tag"] == 'uniform':
-
-        print "% r = log2(maj_i / maj_ip1)"
-        print ""
-        print '        h &      [e] & r([e]) &      maj & r(maj) &      min & r(min) \\\\'
-        print '-------------------------------------------------------------------------------'
-
-        for i in range(0, len(h) - 1):
-
-            maj_i = majorant[i]
-            maj_ip1 = majorant[i + 1]
-
-            min_i = minorant[i]
-            min_ip1 = minorant[i + 1]
-
-            e_i = error[i]
-            e_ip1 = error[i + 1]
-
-            # works !
-            rate_maj = numpy.log2(maj_i / maj_ip1)
-            rate_min = numpy.log2(min_i / min_ip1)
-            rate_e = numpy.log2(e_i / e_ip1)
-
-            print ' %8.2e & %8.2e & %6.2f & %8.2e & %6.2f & %8.2e & %6.2f \\\\' \
-                  % (h[i], e_i, rate_e, maj_i, rate_maj, min_i, rate_min)
-        print ""
-
-        print "% r = ln(maj_i / maj_ip1) / ln(h_i / h_ip1) : "
-        print ""
-        print '        h &      [e] & r([e]) &      maj & r(maj) &      min & r(min) \\\\'
-        print '-------------------------------------------------------------------------------'
-
-        for i in range(0, len(h) - 1):
-            h_i = h[i]
-            h_ip1 = h[i + 1]
-
-            maj_i = majorant[i]
-            maj_ip1 = majorant[i + 1]
-
-            min_i = minorant[i]
-            min_ip1 = minorant[i + 1]
-
-            e_i = error[i]
-            e_ip1 = error[i + 1]
-
-            rate_maj = ln(maj_i / maj_ip1) / ln(h_i / h_ip1)
-            rate_min = ln(min_i / min_ip1) / ln(h_i / h_ip1)
-            rate_e = ln(e_i / e_ip1) / ln(h_i / h_ip1)
-
-            print ' %8.2e & %8.2e & %8.2f & %8.2e & %6.2f & %8.2e & %6.2f \\\\' \
-                  % (h[i], e_i, rate_e, maj_i, rate_maj, min_i, rate_min)
-        print ""
 
 def output_decay_error_summary(test_params, d, p, N, h, e_array, e_l2_array, e_linf_array):
 
@@ -580,17 +517,17 @@ def output_decay_error_summary(test_params, d, p, N, h, e_array, e_l2_array, e_l
                   % (h_i, e_energy_i, rate_e, e_l2_i, rate_e_l2, e_linf_i, rate_e_linf)
         print ""
 
-def output_error_estimates_summary(N, e_maj, maj, min, i_eff):
+def output_error_estimates_summary(N, e_maj, maj, min, i_eff, e_L, e_Id):
 
     print '%------------------------------------------------------------------------------------%'
     print "% Efficiency indices summary"
     print '%------------------------------------------------------------------------------------%\n'
 
-    print ' REF \# &     DOFs & [e]_{maj} &      maj & i_eff(maj)\\\\'
+    print ' REF \# &     DOFs & [e]_{maj} &      maj & i_eff(maj) &   |||e||| &     e_Id &  e_Id/|||e||| \\\\'
     print '---------------------------------------------------------------------------------'
     for i in range(0, len(N)):
-        print ' %6d & %8d & %9.2e & %8.2e & %10.2f \\\\' \
-              % (i, N[i], e_maj[i], maj[i], i_eff[i])
+        print ' %6d & %8d & %9.2e & %8.2e & %10.2f & %9.2e & %8.2e & %10.2f \\\\' \
+              % (i, N[i], e_maj[i], maj[i], i_eff[i], e_L[i], e_Id[i], e_Id[i]/e_L[i])
     print ""
 
 def plot_solution(f, mesh, dim, result_path):

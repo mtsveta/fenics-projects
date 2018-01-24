@@ -8,7 +8,7 @@ from dolfin.cpp.mesh import UnitSquareMesh, Mesh, UnitIntervalMesh, UnitCubeMesh
 import time
 import tests, problem, estimates, postprocess
 from dolfin.cpp.common import set_log_level
-from problem import Grad
+from problem import Grad, NablaGrad, dirichlet_bc_marker, neumann_bc_marker, init_bc_marker, do_nothing_bc_marker
 
 
 CRITICAL  = 50 # errors that may lead to data corruption and suchlike
@@ -26,7 +26,7 @@ parameters['allow_extrapolation'] = True
 #parameters["refinement_algorithm"] = "plaza_with_different_faces"
 #parameters["refinement_algorithm"] = "plaza_with_parent_faces"
 
-expression_degree = 5
+expression_degree = 4
 
 # Define Dirichlet boundary condition
 def boundary(x, on_boundary):
@@ -45,7 +45,7 @@ class TestEstimates():
 
     def __init__(self, test_num, u_expr, grad_u_expr, f_expr, 
                        A_expr, min_eig_A, lmbd_expr, a_expr, c_H, eps,
-                       u0_expr, uD_expr, T, domain, dim):
+                       u0_expr, uD_expr, uN_expr, T, domain, dim):
 
         # Initialize the problem data
         self.u_expr = u_expr
@@ -60,6 +60,7 @@ class TestEstimates():
         self.T = T
         self.u0_expr = u0_expr
         self.uD_expr = uD_expr
+        self.uN_expr = uN_expr
 
         self.boundary = boundary
         self.domain = domain
@@ -83,8 +84,15 @@ class TestEstimates():
                 A = Constant(self.A_expr)
             else:
                 A = as_matrix(self.A_expr)
+        else:
+            A = Expression(self.A_expr, degree=expression_degree)
+
         if dim == 2:
-            invA = 1/A
+            if problem_params['material_tag'] == "material-constant":
+                invA = 1/A
+            else:
+                invA = Expression("1 / (" + self.A_expr + ")", degree=expression_degree)
+
         elif dim == 3: 
             #invA = [[1/A[0][0], 1/A[0][1], 0], [1/A[1][0], 1/A[1][1], 0], [0, 0, 0]]
             invA = [[1 / A[0][0], 0, 0], [0, 1 / A[1][1], 0], [0, 0, 0]]
@@ -93,7 +101,9 @@ class TestEstimates():
 
         # Construct expression for the convection/advection vector field
         if dim == 2:
-            a = Expression((self.a_expr[0], "0.0"), degree=expression_degree)
+            #a = Constant(self.a_expr[0])
+            #a = Expression((self.a_expr, "0.0"), degree=expression_degree)
+            a = Expression((self.a_expr), degree=expression_degree)
         elif dim == 3:
             a = Expression((self.a_expr[0], self.a_expr[1], "0.0"), degree=expression_degree)
 
@@ -110,13 +120,14 @@ class TestEstimates():
 
         # Define initial state
         u0 = Expression(self.u0_expr, degree=expression_degree)
+        uN = Expression(self.uN_expr, degree=expression_degree) # degree=problem_params["v_approx_order"]
         uD = u_e
         lmbd = Expression(self.lmbd_expr, degree=expression_degree)
 
         # Define right-hand side
         f = Expression(self.f_expr, degree=expression_degree)
 
-        return f, A, invA, adjA, lmbd, a, uD, u0, u_e, grad_u_e
+        return f, A, invA, adjA, lmbd, a, uD, uN, u0, u_e, grad_u_e
 
 
     # Function to generate the mesh
@@ -132,11 +143,19 @@ class TestEstimates():
 
             if self.dim == 2:
                 # Create mesh on the unit square
-                mesh = UnitSquareMesh(nx0, nx1)
+                mesh = UnitSquareMesh(nx0, nt)
 
             elif self.dim == 3:
                 # Create mesh on the unit cube
                 mesh = UnitCubeMesh(nx0, nx1, nt)
+
+        elif self.domain == "10byT-domain":
+
+            if self.dim == 2:
+                # Create mesh on the unit square
+                point_1 = Point(0.0, 0.0)
+                point_2 = Point(10.0, self.T)
+                mesh = RectangleMesh(point_1, point_2, nx0, nt, 'left')
 
         elif self.domain == "long-rectangle-domain":
             
@@ -160,13 +179,55 @@ class TestEstimates():
 
         # Get boundary facets function
         facet_funcs = FacetFunction('size_t', mesh)
+        facet_funcs.set_all(0)
+
         # Dirichlet part of the boudary is marked by 0
-        dirichlet_marker = 0
-        facet_funcs.set_all(dirichlet_marker)
+        # dirichlet_bc_marker = 1
+
+        # By default left and right is Dirichlet BC
+        left = AutoSubDomain(lambda x: near(x[0], 0.0))  # x_min
+        right = AutoSubDomain(lambda x: near(x[0], 1.0))  # x_max
+
+        left.mark(facet_funcs, dirichlet_bc_marker)
+        right.mark(facet_funcs, dirichlet_bc_marker)
+
+        if dim == 3:
+            # By default left and right is Dirichlet BC
+            top = AutoSubDomain(lambda x: near(x[1], 0.0))  # x_min
+            bottom = AutoSubDomain(lambda x: near(x[1], 1.0))  # x_max
+
+            top.mark(facet_funcs, dirichlet_bc_marker)
+            bottom.mark(facet_funcs, dirichlet_bc_marker)
+
+        #neumann_bc_marker = dirichlet_bc_marker + 1
+
+        if self.test_num == 24:
+            left = AutoSubDomain(lambda x: near(x[0], 0.0))     # x_min
+            right = AutoSubDomain(lambda x: near(x[0], 10.0))    # x_max
+
+            left.mark(facet_funcs, neumann_bc_marker)
+            right.mark(facet_funcs, neumann_bc_marker)
+
+        if self.test_num == 37:
+            right = AutoSubDomain(lambda x: near(x[0], 1.0))    # x_max
+            right.mark(facet_funcs, neumann_bc_marker)
+
+        if self.test_num == 38 or test_num == 39 or test_num == 40 or test_num == 41 or test_num == 42:
+            left = AutoSubDomain(lambda x: near(x[0], 0.0))  # x_min
+            right = AutoSubDomain(lambda x: near(x[0], 1.0))    # x_max
+
+            left.mark(facet_funcs, neumann_bc_marker)
+            right.mark(facet_funcs, neumann_bc_marker)
 
         # The boundary with IC
-        bottom = AutoSubDomain(lambda x: near(x[1], 0.0))
-        bottom.mark(facet_funcs, dirichlet_marker + 1)
+        #init_bc_marker = neumann_bc_marker + 1 # = 3
+        sigma_0 = AutoSubDomain(lambda x: near(x[1], 0.0))
+        sigma_0.mark(facet_funcs, init_bc_marker)
+
+        # The top of the space-time cylinder
+        #do_nothing_bc_marker = init_bc_marker + 1 # = 4
+        sigma_T = AutoSubDomain(lambda x: near(x[1], self.T))
+        sigma_T.mark(facet_funcs, do_nothing_bc_marker)
 
         ds = Measure('ds')[facet_funcs]
         dS = Measure('dS')[facet_funcs]
@@ -252,7 +313,7 @@ class TestEstimates():
 
         # Calculate the estimate for Freidrichs constant based on the domain
         C_FD = problem.calculate_CF_of_domain(domain, self.dim-1)
-        T = self.T
+        C_Ntr = problem.calculate_trace_constant(self.test_num)
 
         # Define functional spaces based on the mesh
         #--------------------------------------------------------------------------------------------------------------#
@@ -262,7 +323,7 @@ class TestEstimates():
         
         # Define problem data functions
         #--------------------------------------------------------------------------------------------------------------#
-        f, A, invA, adjA, lmbd, a, uD, u0, u_e, grad_u_e = self.convert_problem_data_to_expressions(mesh, test_params)
+        f, A, invA, adjA, lmbd, a, uD, uN, u0, u_e, grad_u_e = self.convert_problem_data_to_expressions(mesh, test_params)
 
         # Majorant parameters
         delta = 1
@@ -276,27 +337,25 @@ class TestEstimates():
                                                test_params["v_approx_order"])
 
         t0_problem = time.clock()
-        self.solve_problem_nd_t(mesh, boundary_facets,
+        self.solve_problem_nd_t(mesh, boundary_facets, ds, dS,
                            V, VV, V_exact, VV_exact, H_div, 
                            u_e, grad_u_e, f, A, invA, adjA, self.min_eig_A, lmbd, a,
-                           u0, uD, C_FD,
+                           u0, uD, uN, C_FD, C_Ntr,
                            delta, gamma,
                            project_path, results_folder_name,
                            test_params)
         t1_problem = time.clock()
-        print "time = ", t1_problem - t0_problem
+
+        print("time = %d s" % (t1_problem - t0_problem))
 
     #-------------------------------------------------------------------------------#
-    def solve_problem_nd_t(self, mesh, boundary_facets,
+    def solve_problem_nd_t(self, mesh, boundary_facets, ds, dS,
                            V, VV, V_exact, VV_exact, H_div,
                            u_e, grad_ue, f, A, invA, adjA, min_eig_A, lmbd, a,
-                           u0, uD, C_FD,
+                           u0, uD, uN, C_FD, C_Ntr,
                            delta, gamma,
                            project_path, results_folder, test_params):
 
-        # Initialize the variables before the loop
-        maj = 10e8
-        i = 0
         # Define the number of refinements
         ref_num = test_params['number_of_refinements']
 
@@ -323,6 +382,13 @@ class TestEstimates():
         rel_error_k = postprocess.allocate_array(ref_num)
         rel_majorant_k = postprocess.allocate_array(ref_num)
 
+        e_L_array = postprocess.allocate_array(ref_num)
+        e_id_array = postprocess.allocate_array(ref_num)
+
+        # Initialize the variables before the loop
+        maj = 10e8
+        i = 0
+
         while i <= ref_num - 1:
 
             print(" ")
@@ -332,21 +398,23 @@ class TestEstimates():
             print(" ")
 
             # Compute approximate solution, its error and majorant
-            u = problem.solve_convection_reaction_diffusion(V, c_H, eps, f, A, min_eig_A, lmbd,
+            u, delta_stab = problem.solve_convection_reaction_diffusion(V, c_H, eps, f, A, min_eig_A, lmbd,
                                                             problem.interpolate_vector_function(a, dim, V_exact, VV_exact),
-                                                            u0, uD, mesh, boundary_facets,
+                                                            u0, uD, uN,
+                                                            mesh, boundary_facets,
                                                             self.dim, self.test_num, test_params)
-            #u = problem.solve_parabolic_problem(V, c_H, eps, f, u0, uD, mesh, boundary_facets, dim, test_num)
+            #u = problem.solve_parabolic_problem(V, c_H, eps, f, A, u0, uD, mesh, boundary_facets, dim, test_num)
             # In case of explicitely unknown exact solution, calculate it with high order order polynomials
             if test_params['solution_tag'] == "reference-solution":
                 # Compute reference solution with high order polynomials
-                u_e = problem.solve_convection_reaction_diffusion(V_exact, c_H, eps, f, A, min_eig_A, lmbd,
+                u_e, delta_stab_e = problem.solve_convection_reaction_diffusion(V_exact, c_H, eps, f, A, min_eig_A, lmbd,
                                                                   problem.interpolate_vector_function(a, dim, V_exact, VV_exact),
-                                                                  u0, uD, mesh, boundary_facets,
+                                                                  u0, uD, uN,
+                                                                  mesh, boundary_facets,
                                                                   self.dim, self.test_num, test_params)
                 #u_e = problem.solve_parabolic_problem(V_exact, c_H, eps, f, u0, uD, mesh, boundary_facets, dim, test_num)
-            '''
-            if test_params["PLOT"] == True:
+            #'''
+            if test_params["PLOT"] == True and ref_num <= 3:
                 # Plot approximate solution
                 postprocess.plot_function_3d(mesh, u, project_path + results_folder + 'u-%d' % i)
                 #postprocess.plot_function_3d(mesh, u_e, project_path + results_folder + 'ue-%d' % i)
@@ -354,22 +422,36 @@ class TestEstimates():
                 #postprocess.plot_function(u_e, mesh, dim, project_path + results_folder + 'u-ref-%d' % i)
                 #postprocess.plot_function_3d(mesh, f, project_path + results_folder + 'ue-ref-%d' % i)
                 #postprocess.plot_function(u, mesh, dim, project_path + results_folder + 'u-%d' % i)
-            '''
+            #'''
             # Calculate error
-            e, val_e, val_grad_e, val_delta_e, e_T = estimates.error_norm(mesh, u, u_e,
-                                                                          lmbd,
-                                                                          problem.interpolate_vector_function(a, dim, V_exact, VV_exact),
-                                                                          T, dim, test_params["v_approx_order"],
-                                                                          V, V_exact)
+            e, val_e, val_grad_e, val_delta_e, e_T, val_e_L, val_e_id, \
+            var_e, var_delta_e, var_grad_e = estimates.error_norm(u, u_e, A, lmbd,
+                                                                  problem.interpolate_vector_function(a, dim, V_exact, VV_exact),
+                                                                  f, c_H,
+                                                                  test_params["v_approx_order"],
+                                                                  mesh, T, dim, V, V_exact)
 
             # Define the error for the majorant
-            error = (2 - delta) * eps * val_grad_e + 2 * val_delta_e + c_H * e_T
-            error_II = (2 - delta) * eps * val_grad_e + 2 * val_delta_e + (1 - 1/gamma) * c_H * e_T
+            error = (2 - delta) * val_grad_e + 2 * val_delta_e + c_H * e_T
+            error_II = (2 - delta) * val_grad_e + 2 * val_delta_e + (1 - 1/gamma) * c_H * e_T
 
             if test_params["error_estimates"] == True:
 
                 # Calculate majorant
-                y = eps * project(Grad(u, dim), H_div)
+                #y_ = project(A * NablaGrad(u_e, dim), V)
+                #y = project(A * NablaGrad(u, dim), H_div)
+
+                #y = project(A * NablaGrad(interpolate(u_e, V_exact), dim), H_div)
+                y = project(A * NablaGrad(u, dim), H_div)
+
+                """
+                if test_params['solution_tag'] == 'predefined-solution':
+                    y = project(A * NablaGrad(u, dim), H_div)
+                elif test_params['solution_tag'] == 'reference-solution':
+                    y = project(A * NablaGrad(interpolate(u_e, V_exact), dim), H_div)
+                """
+
+                #print ' y - y_ = ', assemble(inner(y - y_, y - y_) * dx)
                 #y = interpolate(problem.Grad(u, dim), H_div)
                 MAJORANT_OPTIMIZE = 1
 
@@ -377,11 +459,11 @@ class TestEstimates():
                 #MAJORANT_OPTIMIZE = 1
 
                 # Calculate majorant
-                maj, y, beta, md, mf, rd, rf, majorant_reconstruction_time, majorant_minimization_time = \
+                maj, y, beta, md, mf, var_m_d, var_m_f_w_opt, \
+                majorant_reconstruction_time, majorant_minimization_time  = \
                     estimates.majorant_nd(u, V_exact, y, H_div,
-                                          f, c_H, eps, lmbd, a,
+                                          f, A, invA, min_eig_A, c_H, eps, lmbd, a,
                                           u0, error, mesh, C_FD, dim, test_params)
-
 
                 i_eff_maj = sqrt(maj / error)
 
@@ -395,10 +477,13 @@ class TestEstimates():
                 #i_eff_maj_II = sqrt(maj_II / error)
 
                 # Construct error and majorant distribution
-                #e_distr, m_distr, maj_distr = estimates.majorant_distribution_using_DG0(e, rd, rf, eps, beta, C_FD, mesh, dim)
+                #e_distr, m_distr, maj_distr = estimates.majorant_distribution_using_DG0(e, rd, rf, A, invA, beta, C_FD, mesh, dim)
 
-                e_distr, m_distr, maj_distr = estimates.error_majorant_distribution_nd(e, u, f, c_H, eps, y, beta, C_FD, mesh,
-                                                                                       dim, V_exact)
+                # , mf_distr, maj_distr, ed, md = \
+                ed_distr, md_distr, maj_distr = \
+                     estimates.error_majorant_distribution_nd(mesh, dim, V,
+                                                              var_grad_e, var_delta_e,
+                                                              var_m_d, var_m_f_w_opt, beta, C_FD)
 
                 #min, phi = estimates.minorant(u, mesh, V_exact, u_0, boundary, f, dim, error)
                 #i_eff_min = sqrt(min / error)
@@ -417,6 +502,8 @@ class TestEstimates():
             e_H1_array[i] = sqrt(val_grad_e)
             e_L2_array[i] = sqrt(val_e)
             e_total_array[i] = sqrt(error)
+            e_L_array[i] = sqrt(val_e_L)
+            e_id_array[i] = sqrt(val_e_id)
 
             maj_array[i] = sqrt(maj)
             i_eff_maj_array[i] = sqrt(maj / error)
@@ -443,23 +530,18 @@ class TestEstimates():
                                                             num_cells, num_verts)
             # Plot and document mesh on the current refinement iteration
             postprocess.document_results(mesh, test_params, project_path, results_folder, results_info,
-                                         e_distr, m_distr, maj_distr, error, maj, i_eff_maj, min, i_eff_min,
+                                         ed_distr, md_distr, maj_distr, error, maj, i_eff_maj, min, i_eff_min,
                                          h_max_array, h_min_array)
             # Refine mesh
             #mesh = self.execute_refiniment_strategy(mesh, test_params, e_distr, m_distr)
-            mesh = self.execute_refiniment_strategy(mesh, test_params, e_distr, maj_distr)
+            mesh = self.execute_refiniment_strategy(mesh, test_params, ed_distr, md_distr)
 
             # Update functional spaces, BC, and stiffness/mass matrices
             V, VV, V_exact, VV_exact, H_div = problem.functional_spaces(mesh,
                                                                            test_params,
                                                                            dim)
-
-
-            #plot(mesh, interactive=True)
-            boundary_facets = FacetFunction('size_t', mesh)
-            boundary_facets.set_all(0)
-            bottom = AutoSubDomain(lambda x: near(x[1], 0.0))
-            bottom.mark(boundary_facets, 1)
+            # Update boundary faces
+            boundary_facets, ds, dS = self.construct_boundary_faces(mesh)
 
             i = i + 1
 
@@ -468,7 +550,8 @@ class TestEstimates():
         postprocess.document_errors_decay(float(dim), test_params, decay_result_folder,
                                           DOFs[0:i], h_min_array[0:i],
                                           e_H1_array[0:i], e_L2_array[0:i],
-                                          maj_array[0:i], min_array[0:i], i_eff_maj_array[0:i])
+                                          maj_array[0:i], min_array[0:i], i_eff_maj_array[0:i],
+                                          e_L_array[0:i], e_id_array[0:i])
 
     def execute_refiniment_strategy(self, mesh, test_params, e_distr, m_distr):
         # Define the refinement strategy
@@ -540,42 +623,70 @@ tests = {1: tests.quadratic_polynomial_solution_2d_t,
          7: tests.sinusoidal_polynomial_solution_1d_t_on_long_rectangular_domain,
          8: tests.example_steinbach_paper_1d_t_c_1_k_1_cH_1,
          9: tests.example_steinbach_paper_1d_t_c_1_k_1_cH_10,
-         #10: tests.example_steinbach_paper_1d_t_c_1_k_1_cH_100,
+         10: tests.example_tutorial_example_3_a_x_cH_10,
          11: tests.example_steinbach_paper_1d_t_c_1_k_1_cH_1_with_u0,
-         13: tests.example_steinbach_paper_1d_t_c_1_k_1_cH_100_with_u0,
          12: tests.example_tutorial_example_2,
+         13: tests.example_steinbach_paper_1d_t_c_1_k_1_cH_100_with_u0,
          14: tests.example_steinbach_paper_1d_t_c_100,
          15: tests.example_tutorial_example_2_cH_10,
          16: tests.example_tutorial_example_2_cH_20,
          17: tests.example_tutorial_example_2_cH_1,
-         18: tests.example_tutorial_example_2_cH_100}
+         18: tests.example_tutorial_example_2_cH_100,
+         19: tests.quadratic_polynomial_solution_1d_t_2_A_heterogenous,
+         20: tests.quadratic_polynomial_solution_1d_t_2_A_heterogenous_quadr,
+         21: tests.sin_solution_1d_t_2_A_heterogenous_lin,
+         22: tests.sin_solution_1d_t_2_A_heterogenous_quadr,
+         23: tests.sin_solution_1d_t_2_A_heterogenous_sin,
+         24: tests.fokker_plank_example_2_1d,
+         25: tests.fokker_plank_example_3_sigma_1eminus1_1d,
+         26: tests.linear_trigonometric_solution_1d_rho_1minus3_t,
+         27: tests.quadratic_polynomial_solution_conv_react_sigma_1_1d_t,
+         28: tests.example_tutorial_example_3_a_const_lambda_sigma_1eminus1_cH_2,
+         29: tests.example_tutorial_example_3_a_const_lambda_sigma_5eminus2_cH_2,
+         30: tests.example_tutorial_example_3_a_const_lambda_sigma_1_cH_2,
+         31: tests.quadratic_polynomial_solution_1d_t_with_reference_solution_calculation,
+         32: tests.quadratic_polynomial_solution_1d_t_with_exact_solution_calculation,
+         33: tests.quadratic_polynomial_solution_1d_t_2_with_reference_solution,
+         34: tests.example_tutorial_example_3_a_const_lambda_sigma_1_cH_2_with_reference,
+         35: tests.example_tutorial_example_3_a_const_lambda_sigma_1eminus2_cH_1_with_reference,
+         36: tests.example_tutorial_example_3_a_const_lambda_sigma_1eminus2_cH_1,
+         37: tests.example_tutorial_example_4_a_linear_lambda_sigma_1eminus2_cH_1_Neumann_right,
+         38: tests.example_tutorial_example_5_a_linear_lambda_sigma_1eminus2_cH_1_Neumann_pure,
+         39: tests.example_tutorial_example_6_a_linear_lambda_sigma_1eminus2_cH_1_Neumann_pure_zero,
+         40: tests.example_tutorial_example_7_a_linear_lambda_sigma_1eminus3_cH_1_Neumann_pure_zero,
+         41: tests.example_tutorial_example_7_a_linear_lambda_sigma_1e3_cH_1_Neumann_pure_zero,
+         42: tests.example_tutorial_example_8_a_const_cH_1_Neumann_pure_zero}
+         #,
+         #31: tests.example_tutorial_example_3_a_const_lambda_sigma_5eminus3_cH_2}
+
 # Set the number of the test and call for the problem data
-test_num = 4
+test_num = 40
 u_expr, grad_u_expr, f_expr, \
 A_expr, min_eig_A, lambda_expr, a_expr, c_H, eps, \
-u0_expr, uD_expr, T, domain, dim, \
+u0_expr, uD_expr, uN_expr, T, domain, dim, \
 solution_tag, material_tag, pde_tag = tests[test_num]()
 
-# Init problem parameters
-test_params = {'refinement_tag': uniform_tag,
+# Init problem parameter
+# s
+test_params = {'refinement_tag': adaptive_tag,
                   'marking_tag': bulk_tag,
-                  'percentage_value': 0.7,
-                  'refinement_criteria_tag': majorant_tag,
+                  'percentage_value': 0.6,
+                  'refinement_criteria_tag': error_tag,
                   'solving_strategy_tag': "with-refinement",
-                  'number_of_refinements': 3,
-                  'nx0': 2,
-                  'nx1': 2,
-                  'nx2': 2,
-                  'nt':  2,
+                  'number_of_refinements': 10,
+                  'nx0': 8,
+                  'nx1': 8,
+                  'nx2': 8,
+                  'nt':  16,
                   'res':  2,
                   'v_approx_order': 1,
                   'flux_approx_order': 2,
-                  'v_exact_approx_order': 3,
+                  'v_exact_approx_order': expression_degree,
                   'expression_degree': expression_degree,
                   'solution_tag': solution_tag,
                   'material_tag': material_tag,
                   'pde_tag': pde_tag,
-                  'majorant_optimization_iterations': 4,
+                  'majorant_optimization_iterations': 3,
                   'error_estimates': True,
                   'MAJORANT_OPTIMIZE': True,
                   'PLOT': True,
@@ -584,7 +695,7 @@ test_params = {'refinement_tag': uniform_tag,
 
 test = TestEstimates(test_num, u_expr, grad_u_expr, f_expr, 
                      A_expr, min_eig_A, lambda_expr, a_expr, c_H, eps,
-                     u0_expr, uD_expr, T, domain, dim)
+                     u0_expr, uD_expr, uN_expr, T, domain, dim)
 test.test_estimates(test_params)
 
 

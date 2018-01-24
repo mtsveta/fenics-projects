@@ -435,9 +435,9 @@ def solve_problem_nd_t(mesh, V, VV, V_exact, VV_exact, H_div,
                 distr = e_distr
             elif problem_params['refinement_criteria_tag'] == 'majorant':
                 distr = m_distr
-            #elif problem_params['refinement_criteria_tag'] == 'e-dwr':
+            #elif test_params['refinement_criteria_tag'] == 'e-dwr':
             #    distr = e_dwr_distr
-            #elif problem_params['refinement_criteria_tag'] == 'residual':
+            #elif test_params['refinement_criteria_tag'] == 'residual':
             #    distr = residual_distr
 
             # Run the marking procedure
@@ -515,7 +515,7 @@ def solve_problem_nd_t(mesh, V, VV, V_exact, VV_exact, H_div,
 
         '''
         eta_distr, E_DWR_distr, J_e_distr, m_d_distr, m_df_distr  = \
-            compare_error_indicators(mesh, V, V_star, V_e, f, u_0, u0_boundary, u,
+            compare_error_indicators(mesh, V, V_star, V_e, f, u_0, boundary, u,
                                      interpolate(u_e, V_e), interpolate(grad_u_e, VV_e),
                                      y, beta, test_num, tag)
 

@@ -16,7 +16,7 @@ from scipy.sparse import csr_matrix
 
 # Console output of error and majorant values
 def output_optimization_results(iter, maj, m_d, m_f, i_eff, beta, error):
-    print 'opt. # %d: e^2 = %8.2e, maj^2 = %8.2e, m^2_d = %8.2e, m^2_f = %8.2e, (i_eff)^2 = %.4f' \
+    print 'opt. # %d: e^2 = %8.2e, maj^2 = %8.2e, m^2_d = %8.2e, m^2_f = %8.2e, i_eff = %.4f' \
           % (iter, error, maj, m_d, m_f, i_eff)
 
 # Calculate optimal (wrt to big changes in the reaction fucntion) majorant
@@ -67,8 +67,8 @@ def calculate_majorant_bar_mu_opt(u, y, beta, f_bar, A, invA, min_eig_A, lmbd, m
     # Calculate the optimal value for beta parameter
     beta = C_FD * sqrt(m_f_one_minus_mu_opt / m_d / min_eig_A)
 
-    print "m_f_one_minus_mu_opt = ", m_f_one_minus_mu_opt
-    print "m_f_w_opt = ", m_f_w_opt
+    #print "m_f_one_minus_mu_opt = ", m_f_one_minus_mu_opt
+    #print "m_f_w_opt = ", m_f_w_opt
 
     return maj, m_d, m_f_w_opt, beta, var_m_d, var_m_f_w_opt
 
@@ -147,6 +147,18 @@ def majorant_nd(v, y, H_div, f, A, invA, min_eig_A, eps, a, lmbd,
     print '%------------------------------------------------------------------------------------%'
     print " "
 
+    info(parameters, verbose=True)
+
+    print(parameters.linear_algebra_backend)
+    list_linear_solver_methods()
+    list_krylov_solver_preconditioners()
+
+    solver = KrylovSolver('gmres', 'ilu')
+    prm = solver.parameters
+    prm.absolute_tolerance = 1e-10
+    prm.relative_tolerance = 1e-6
+    prm.maximum_iterations = 1000
+
     output_optimization_results(0, maj, m_d, m_f, i_eff, beta, error)
 
     majorant_reconstruction_time = toc()
@@ -176,7 +188,13 @@ def majorant_nd(v, y, H_div, f, A, invA, min_eig_A, eps, a, lmbd,
             #yRhs = sum((C_FD ** 2) / min_eig_A * z, beta * g)
             #solve(yMatrix, Y, yRhs)
 
-            solve((C_FD ** 2) / min_eig_A * S + beta * K, Y, (C_FD ** 2) / min_eig_A * z + beta * g)
+            #solve((C_FD ** 2) / min_eig_A * S + beta * K, Y, (C_FD ** 2) / min_eig_A * z + beta * g,
+            #      "gmres", "amg")
+            if len(Y) <= 1e4:
+                solve((C_FD ** 2) / min_eig_A * S + beta * K, Y, (C_FD ** 2) / min_eig_A * z + beta * g)
+            else:
+                solver.solve((C_FD ** 2) / min_eig_A * S + beta * K, Y, (C_FD ** 2) / min_eig_A * z + beta * g,
+                  "gmres", "ilu")
 
             y.vector = Y
 
@@ -260,24 +278,16 @@ def error_majorant_distribution_nd(mesh, dim,
        if sum(md_distr) <= DOLFIN_EPS:
            maj_distr = mf_distr
        else:
-           maj_distr = (1.0 + beta) * md_distr + mf_distr
+           maj_distr = (1.0 + beta) * md_distr + mf_distr # here (1 + 1/beta) weight is ommited since it is included into the optimal mf_wopt
 
     e_distr = ed_distr + delta_e_distr
-
 
     #print 'md_cells', md_distr
     #print 'ed_cells', ed_distr
 
-    '''
-    print 'mf_cells', mf_distr
-    print 'delta_e_cells', delta_e_distr
-
-    print 'maj_cells', maj_distr
-    print 'e_cells', e_distr
-
+    print 'sum md_cells', sum(md_distr)
     print 'sum maj_cells', sum(maj_distr)
     print 'sum e_cells', sum(e_distr)
-    '''
 
     return ed_distr, delta_e_distr, e_distr, md_distr, mf_distr, maj_distr, ed, md
 
@@ -386,7 +396,10 @@ def minorant(v_ref, v, mesh, ds, Vh, uN, uD_boundary, f, A, lmbd, conv, dim, tes
         w = Function(Vh)
         # Dirichlet function = 0.0 since we are looking for w =  v_ref - v
         bc = DirichletBC(Vh, Constant(0.0), uD_boundary)
-        solve(a_var == L_var, w, bc)
+
+        solve(a_var == L_var, w, bcs=bc,
+              solver_parameters={"linear_solver": "cg", "preconditioner": "ilu"},
+              form_compiler_parameters={"optimize": True})
 
     elif test_params["solution_tag"] == "reference-solution":
         w = project(v_ref - v, Vh)

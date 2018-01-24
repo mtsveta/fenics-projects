@@ -1,21 +1,31 @@
-from ufl.tensors import as_scalar
-
 __author__ = 'svetlana'
 
 from dolfin import *
-from numpy import info
 from dolfin.cpp.mesh import MeshFunction, cells, CellFunction
 from ufl.tensoralgebra import Inverse
-import ufl
+from numpy.linalg import inv
+import numpy
+expression_degree = 4
 
 
-def inverse(A, dim):
+# Generalized inverse operator
+def inverse(A, A_expr, dim):
+    """
+    :param A: 1d-scalar or nd-matrix to inverse
+    :param dim: dimension of the problem
+    :return: inverted A depending on dim
+    """
+
     if dim == 1:
         invA = 1 / A
     else:
-        invA = Inverse(A)
+        A_mtx = numpy.matrix(A_expr)
+        inv_A_mtx = inv(A_mtx)
+        invA = as_matrix(inv_A_mtx.tolist())
+
     return invA
 
+# Generalized gradient operator
 def Grad(f, dim):
     """
     :param f: function
@@ -23,12 +33,13 @@ def Grad(f, dim):
     :return: gradient of the function depending on dim
     """
     if dim > 1:
-        div_f = grad(f)
+        grad_f = grad(f)
     else:
         # Define grad operator for the 1D case
-        div_f = Dx(f, 0)
-    return div_f
+        grad_f = Dx(f, 0)
+    return grad_f
 
+# Generalized divergence operator
 def Div(f, dim):
     """
     :param f: function
@@ -42,25 +53,24 @@ def Div(f, dim):
         div_f = Dx(f, 0)
     return div_f
 
-# Contruction of system matrixes
-def construct_stiffness_and_mass_matrices(u, v, lmbd):
-    # Variational forms of stiffness (K) & mass (M) matrices
-    a_K = inner(nabla_grad(u), nabla_grad(v)) * dx
-    a_M = u * v * dx
-
-    a_R = lmbd * u * v * dx
-
-    K = assemble(a_K)
-    M = assemble(a_M)
-    R = assemble(a_R)
-
-    return K, M, R
-
-
-def functional_spaces(mesh, v_degree, y_degree, dim):
-
+# Function to generate functional spaces
+def functional_spaces(mesh, test_params, dim):
+    """
+    :param mesh: mesh
+    :param v_degree: degree of basis ussed to approximate approximation v
+    :param y_degree: degree of basis ussed to approximate flux y
+    :param dim: dimension of the problem
+    :return: constructed functional spaces
+             V approximation space
+             VV approximation vector-space
+             V_exact high order approximation space
+             VV_exact high order approximation vector-space
+             H_div space for fluxes
+    """
+    v_degree = test_params['v_approx_order']
+    y_degree = test_params['flux_approx_order']
     # Order of the space of the exact solutions
-    v_exact_degree = v_degree + 3
+    v_exact_degree = test_params["v_exact_approx_order"]
 
     # Define functional spaces
     V = FunctionSpace(mesh, 'Lagrange', v_degree)
@@ -72,11 +82,12 @@ def functional_spaces(mesh, v_degree, y_degree, dim):
     if dim == 1:
         H_div = FunctionSpace(mesh, 'Lagrange', y_degree)
     else:
-        H_div = FunctionSpace(mesh, 'RT', y_degree)
-
+        #H_div = FunctionSpace(mesh, 'RT', y_degree)
+        H_div = VectorFunctionSpace(mesh, 'Lagrange', y_degree)
 
     return V, VV, V_exact, VV_exact, H_div
 
+# Output description of the problem
 def output_problem_characteristics(test_num, u_expr, grad_u_expr, f_expr, A_expr, lambda_expr, a_expr, uD_expr,
                                    domain, dim, num_cells, num_vertices, space_approx_deg, flux_approx_deg):
 
@@ -87,41 +98,43 @@ def output_problem_characteristics(test_num, u_expr, grad_u_expr, f_expr, A_expr
 
     print "test: ", test_num
     print "domain: ", domain
-    print "u = ", u_expr
     print "f = ", f_expr
     print "lambda = ", lambda_expr
     print "A = ", A_expr
     print "a = ", a_expr
     print "uD = ", uD_expr
+    print "u = ", u_expr
+    print "grad_u = ", grad_u_expr
+
 
     print 'mesh parameters: num_cells = %d, num_vertices = %d' % (num_cells, num_vertices)
     print "space func approx_deg = ", space_approx_deg
     print "flux approx_deg = ", flux_approx_deg
+    print "dim", dim
 
-
+# Calculate Friedrichs constant of thegdiven domian
 def calculate_CF_of_domain(domain, dim):
-
+    """
+    :param domain: domain name
+    :param dim: dimension of the problem
+    :return: C_FD Friedrichs constant
+    """
     if domain == "l-shape-domain" and dim == 3:
-
         height = 1
         width = 2
         length = 2
         C_FD = 1.0 / DOLFIN_PI / sqrt(1.0 / height**2 + 1.0 / width**2 + 1.0 / length**2)
 
     elif domain == "1times1-minus-0times0" and dim == 3:
-
         height = 2
         width = 2
         length = 2
-
         C_FD = 1.0 / DOLFIN_PI / sqrt(1.0 / height**2 + 1.0 / width**2 + 1.0 / length**2)
 
     elif domain == "unit-domain":
-
         height = 1
         width = 1
         length = 1
-
         if dim == 3:
             C_FD = 1.0 / DOLFIN_PI / sqrt(1.0 / height**2 + 1.0 / width**2 + 1.0 / length**2)
         elif dim == 2:
@@ -130,80 +143,181 @@ def calculate_CF_of_domain(domain, dim):
             C_FD = 1.0 / DOLFIN_PI / sqrt(1.0 / length**2)
 
     elif domain == "l-shape-domain" and dim == 2:
-
         width = 2
         length = 2
-
         C_FD = 1.0 / DOLFIN_PI / sqrt(1.0 / width**2 + 1.0 / length**2)
 
     elif domain == "circle-domain" and dim == 2:
-
         width = 4
         length = 4
-
         C_FD = 1.0 / DOLFIN_PI / sqrt(1.0 / width**2 + 1.0 / length**2)
 
-    print "domain: ", domain
     print "C_FD = 1 / pi / (h_1^(-2) + ... + h_n^(-2)) = ", C_FD
 
     return C_FD
 
-def solve_convection_reaction_diffusion(V, f, A, lambda_l, lmbd, a, u0, u0_boundary, mesh, dim):
+# Class for delta-stabilization parameter (inherited from Expression)
+class DeltaExpression(Expression):
+    """
+    :param eps: small parameter in fromt of diffusion operator, 0 < eps << 1
+    :param a: convection field
+    :param mesh: mesh
+    :return: values of the delta function defined element-wise
+    """
+
+    def __init__(self, eps, a, mesh, degree):
+        self._eps = eps
+        self._a = a
+        self._mesh = mesh
+        self._degree = degree
+
+    # Redefine eval_cell function
+    def eval_cell(self, value, x, ufc_cell):
+        """
+        :param value: values of the delta-function element-wise
+        :param x:
+        :param ufc_cell: cell of the mesh
+        :return: values of the delta function defined element-wise
+        """
+
+        # Obtain the cell based on its index in the mesh
+        cell = Cell(self._mesh, ufc_cell.index)
+        # Get the diameter of the cell
+        h = cell.h()
+        # Calculate the || a ||_inf norm
+        a_norm = norm(self._a.vector(), 'linf')
+
+        # Calculate Peclet number
+        Pe = h * a_norm / 2 / self._eps
+
+        # Defined auxilary constants
+        C_0 = 0.1           # 0.1 in L.Chen paper
+        C_1 = 0.0    # 0.0 in L.Chen paper
+
+        # Defined stabilized parameter depending on Peclet number
+        if Pe > 1:
+            value[0] = C_0 * h / a_norm # convection dominated
+        elif Pe <= 1:
+            value[0] = C_1 * (h)**2 / self._eps # diffusion dominated
+
+# Function to solve convection-reaction-diffusion
+def solve_convection_reaction_diffusion(V, f, A, lambda_l, lmbd, a,
+                                        boundary, uD, uN,
+                                        mesh, boundary_facets,
+                                        dim, test_num, test_params):
+    """
+    :param V: functional space of the approximation
+    :param f: right-hand side
+    :param A: diffusion matrix
+    :param lambda_l: minimal eigenvalue of matrix A
+    :param lmbd: reaction function
+    :param a: convection function
+    :param uD: Dirichlet boundary function
+    :param uD_boundary: definition of the Dirichlet boundary
+    :param mesh: mesh-discretization of the domain
+    :param dim: geometrical dimension of the domain
+    :return: solution u and stabilization element-wise fucntion delta
+    """
 
     # Define variational problem
     u = TrialFunction(V)
     v = TestFunction(V)
 
-    def delta_T(mesh, a, lambda_l):
+    # Define the stabilization parameter delta element-wise
+    if test_params["STABILIZE"]:
+        delta = DeltaExpression(eps=lambda_l, a=a, mesh=mesh, degree=expression_degree)
+        #delta = 0.5 * CellSize(mesh) / norm(a.vector(), 'linf')
+    else:
+        delta = 0.0
 
-        h = CellSize(mesh)
-        C_1 = 0.2
-        delta = C_1 * h * h / lambda_l
-        return delta
+    # If v \in P1: divAgradu = 0
+    if test_params["v_approx_order"] == 1:
+        divAgradu = 0.0
+    else:
+        # Define bilinear form a(u, v) and linear functional f(v)
+        if dim == 1:
+            divAgradu = - A * Div(Grad(u, dim), dim)
+        else:
+            divAgradu = - Div(A * Grad(u, dim), dim)
 
-    class DeltaExpression(Expression):
-        def __init__(self, lambda_min, a, mesh):
-            self._lamda_min = lambda_min
-            self._a = a
-            self._mesh = mesh
+    # SUPG stabilization
+    """
+    s_stab = delta * (inner(divAgradu + lmbd * u + inner(a, Grad(u, dim)),
+                      inner(a, Grad(v, dim)))) * dx(domain=mesh)
+    l_stab = delta * (inner(f, inner(a, Grad(v, dim)))) * dx(domain=mesh)
+    """
+    # GLS stabilization
+    #"""
+    s_stab = delta * (inner(divAgradu + lmbd * u + inner(a, Grad(u, dim)),
+                      inner(a, Grad(v, dim)) + lmbd * v)) * dx(domain=mesh)
+    l_stab = delta * (inner(f, inner(a, Grad(v, dim)) + lmbd * v)) * dx(domain=mesh)
+    #"""
+
+    # CIP stabilization
+    """
+    n = FacetNormal(mesh)
+    # Check this jump fucntion
+    s_stab = delta * (inner(inner(a, (Grad(jump(v, n), dim))), inner(a, Grad(v, dim)))) * dS(domain=mesh),
+    l_stab = 0
+    """
+
+    # CIP stabilization
+    """
+    n = Normal(mesh)
+    s_stab = delta * (inner(inner(n, Grad(v, dim)),
+                      ) * dS(domain=mesh),
+    l_stab = 0
+    """
+
+    # Bilinear form
+    a_stab = (inner(A * Grad(u, dim), Grad(v, dim)) 
+              + lmbd * inner(u, v) 
+              + inner(inner(a, Grad(u, dim)), v)) * dx(domain=mesh) \
+              + s_stab
+
+    #L_stab = (f * v) * dx(domain=mesh) + (uN * v) * ds(1) \
+    #         + l_stab
+
+    if test_num == 48:
+        L_stab = (f * v) * dx(domain=mesh) + (uN * v) * ds(1) \
+                  + l_stab
+    elif test_num == 70:
+        a_stab = (inner(A * Grad(u, dim), Grad(v, dim)) - inner(a * u, Grad(v, dim))) * dx(domain=mesh)
+        L_stab = (f * v) * dx(domain=mesh)
+
+    else:
+        L_stab = (f * v) * dx(domain=mesh) \
+                  + l_stab
 
 
-        def eval_cell(self, value, x, ufc_cell):
-            cell = Cell(self._mesh, ufc_cell.index)
-            h = cell.diameter()
-            a_norm = norm(a.vector(), 'linf', mesh=mesh)
-            Pe = h * a_norm / 2 / self._lamda_min
-            C_0 = 1e-2
-            C_1 = 1e-2
-            if Pe > 1:
-                value[0] = C_0 * h
-            elif Pe <= 1:
-                value[0] = C_1 * (h)**2 / self._lamda_min
-
-    #delta = DeltaExpression(lambda_min=lambda_l, a=a, mesh=mesh)
-    delta = 0
-
-    a_pert = (inner(A * Grad(u, dim), Grad(v, dim)) + lmbd * inner(u, v) + inner(inner(a, Grad(u, dim)), v) +
-              delta * (inner(Div(Grad(u, dim), dim) + lmbd * u + inner(a, Grad(u, dim)), inner(a, Grad(v, dim))))) * dx(domain=mesh)
-    L_pert = (f * v +
-              delta * (inner(f, inner(a, Grad(v, dim))))) * dx(domain=mesh)
-
+    # Define the unknown function
     u = Function(V)
 
     # Define boundary condition
-    bc = DirichletBC(V, u0, u0_boundary)
+    if test_num == 45:
+        # Dirichlet boundary is devided into south (bottom) part and rest of it
+        bc = [DirichletBC(V, uD[0], boundary_facets, 0), # top, right, left
+              DirichletBC(V, uD[1], boundary_facets, 1)] # bottom
+    elif test_num == 48:
+        # Dirichlet boundary is all parts of boudary except the east(right) part of it
+        bc = DirichletBC(V, uD, boundary_facets, 0)
+    else:
+        bc = DirichletBC(V, uD, boundary)
 
-    #solve(a == L, u, bc)
-
-    solve(a_pert == L_pert, u, bc)
-    #plot(u)
-    #print "delta", delta
+    # Solve the system generated by the variational equation a(u, v) = f(v)
+    solve(a_stab == L_stab, u, bc)
 
     return u, delta
 
-# Interpolate scalar and vector functions
+# Interpolate scalar (dim = 1) and vector (dim > 1) functions
 def interpolate_vector_function(a, dim, V_exact, VV_exact):
-
+    """
+    :param a: convection function
+    :param dim: geometrical dimension
+    :param V_exact: functional space of the exact function
+    :param VV_exact: functional space of the exact vector function
+    :return: interpolated vector fucntion
+    """
     if dim == 1:
         a_interpolated = interpolate(a, V_exact)
     else:
@@ -211,28 +325,45 @@ def interpolate_vector_function(a, dim, V_exact, VV_exact):
 
     return a_interpolated
 
+# Function that construct diffusion matrix as the cell-wise function
 def construct_from_mesh_functions(dim, A_expr, mesh):
+    """
+    :param dim: geometrical dimension
+    :param A_expr: expression defining diffusion matrix
+    :param mesh: mesh-discretization of the domain
+    :return: cell-wise function
+    """
 
-    if dim == 2:
-        a01 = MeshFunction("double", mesh, dim)
-        a11 = MeshFunction("double", mesh, dim)
-
+    # Define scalar cell-wise function for dim = 1
+    a00 = MeshFunction("double", mesh, dim)
+    # Define function expression from the problem data (depending on how many of the conditions are discussed )
     A1 = A_expr[0]
     A2 = A_expr[1]
 
-    a00 = MeshFunction("double", mesh, dim)
+    # Case for dimension higher then one (symmetric case)
+    if dim >= 2:
+        a01 = MeshFunction("double", mesh, dim)
+        a11 = MeshFunction("double", mesh, dim)
+    # Case for dimension higher then two (symmetric case)
+    if dim >= 3:
+        a02 = MeshFunction("double", mesh, dim)
+        a12 = MeshFunction("double", mesh, dim)
+        a22 = MeshFunction("double", mesh, dim)
 
     for cell in cells(mesh):
-        if cell.midpoint().x() < 0.5:
-            if dim == 2:
-                a00[cell] = A1[0][0]
-                a11[cell] = A1[1][1]
-                a01[cell] = A1[0][1]
+        if cell.midpoint().x() < 0.5: # this condition checks whethe the elements on the left part of the domain
+            A = A_expr[0]
         else:
-            if dim == 2:
-                a00[cell] = A2[0][0]
-                a11[cell] = A2[1][1]
-                a01[cell] = A2[0][1]
+            A = A_expr[1]
+
+        a00[cell] = A[0][0]
+        if dim >= 2:
+            a11[cell] = A[1][1]
+            a01[cell] = A[0][1]
+        if dim >= 3:
+            a02[cell] = A[0][2]
+            a12[cell] = A[1][2]
+            a22[cell] = A[2][2]
 
     # Code for C++ evaluation of conductivity
     conductivity_code = """
@@ -261,11 +392,49 @@ def construct_from_mesh_functions(dim, A_expr, mesh):
 
     };
     """
+    # Define expression via C++ code
     a = Expression(cppcode=conductivity_code)
     a.a00 = a00
-    a.a01 = a01
-    a.a11 = a11
-    A = as_matrix(((a[0], a[1]), (a[1], a[2])))
+    if dim >= 2:
+        a.a01 = a01
+        a.a11 = a11
+    if dim >= 3:
+        a.a02 = a02
+        a.a12 = a12
+        a.a22 = a22
+    # Define matrix depending on the dimension
+    if dim == 1:
+        A = a[0]
+    elif dim == 2:
+        # A = |a[0] a[1]|
+        #     |a[1] a[2]|
+        A = as_matrix(((a[0], a[1]), (a[1], a[2])))
+    elif dim == 3:
+        # A = |a[0] a[1] a[2]|
+        #     |a[1] a[3] a[4]|
+        #     |a[2] a[4] a[5]|
+        A = as_matrix(((a[0], a[1], a[2]), (a[1], a[3], a[4]), (a[2], a[3], a[5])))
 
     return A
+
+# Contruction of system matrixes
+def construct_stiffness_and_mass_matrices(u, v, lmbd):
+    """
+    :param u: function
+    :param v: test function
+    :param v: test function
+    :param lmbda: reaction function
+    :return: stiffness and mass matrixes
+    """
+
+    # Variational forms of stiffness (K), mass (M) matrices
+    a_K = inner(nabla_grad(u), nabla_grad(v)) * dx
+    a_M = u * v * dx
+    a_R = lmbd * u * v * dx
+
+    K = assemble(a_K)
+    M = assemble(a_M)
+    R = assemble(a_R)
+
+    return K, M, R
 

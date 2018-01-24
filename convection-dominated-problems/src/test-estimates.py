@@ -231,7 +231,7 @@ class TestEstimates():
             # Define Dirichlet BC function
             uD = Expression(self.uD_expr, eps=eps_init, degree=expression_degree)
 
-        uN = Expression(self.uN_expr, gree=problem_params["v_approx_order"])
+        uN = Expression(self.uN_expr, degree=problem_params["v_approx_order"])
 
         # Construct the expression for the right-hand side
         f = Expression(self.f_expr, eps=eps_init, degree=expression_degree)
@@ -399,7 +399,7 @@ class TestEstimates():
             problem.functional_spaces(mesh, test_params, self.dim)
 
         # Define problem data functions
-        eps = 1e-0  # initialize the eps
+        eps = 1e0  # initialize the eps
         #--------------------------------------------------------------------------------------------------------------#
         f, A, invA, adjA, min_eig_A, lmbd, a, uD, uN, u_e, grad_u_e = self.convert_problem_data_to_expressions(mesh, test_params, eps)
 
@@ -413,14 +413,17 @@ class TestEstimates():
         t0_problem = time.clock()
 
         while eps > self.eps:
+
             mesh, V, VV, V_exact, VV_exact, H_div, boundary_facets, ds, dS \
                 = self.solve_problem_nd_t(mesh, boundary_facets, ds, dS,
                                     V, V_exact, VV_exact, H_div,
-                                    u_e, f, A, invA, adjA, min_eig_A, lmbd, a,
+                                    u_e, f, A, invA, adjA, min_eig_A, lmbd, a, eps,
                                     uD, uN,
                                     C_FD, C_Ntr,
                                     project_path, results_folder_name, test_params)
 
+            test_params['number_of_refinements'] = test_params['number_of_refinements'] + 2
+            #test_params['percentage_value'] = test_params['percentage_value'] + 0.1
             eps = 1e-1 * eps
             f, A, invA, adjA, min_eig_A, lmbd, a, uD, uN, u_e, grad_u_e = self.convert_problem_data_to_expressions(mesh,
                                                                                                                    test_params,
@@ -435,14 +438,14 @@ class TestEstimates():
     # -------------------------------------------------------------------------------#
     def solve_problem_nd_t(self, mesh, boundary_facets, ds, dS,
                            V, V_exact, VV_exact, H_div,
-                           u_e, f, A, invA, adjA, min_eig_A, lmbd, a,
+                           u_e, f, A, invA, adjA, min_eig_A, lmbd, a, eps_curr,
                            uD, uN,
                            C_FD, C_Ntr,
                            project_path, results_folder,
                            test_params):
 
         # Define the number of refinements
-        ref_num = test_params['number_of_refinements']
+        ref_num = test_params['number_of_refinements'] + 20
 
         # Define arrays with data collected on the refinement steps
         ref_num_array = postprocess.allocate_array(ref_num + 1)
@@ -465,6 +468,7 @@ class TestEstimates():
         # Initialize the variables before the loop
         maj = 10e8
         i = 0
+        h_min =10e8
 
 
         # TO DO: Calculate the reference solution on the refined mesh
@@ -487,7 +491,7 @@ class TestEstimates():
                                                                      dim, test_num)
         '''
 
-        while i <= ref_num and maj > test_params['accuracy_level']:
+        while h_min > eps_curr: # (i <= ref_num and maj > test_params['accuracy_level']) or
 
             print(" ")
             print("%-----------------------------------------------------------------------------------------------------------%")
@@ -562,7 +566,7 @@ class TestEstimates():
                                                              var_grad_e, var_lmbd_diva_e, var_m_d, var_m_f_w_opt, beta)
 
                 # Calculate the smoothness parameter
-                smoothness_distr = problem.smoothness_distribution(u, mesh, dim)
+                #smoothness_distr = problem.smoothness_distribution(u, mesh, dim)
                 #print "smoothness ", smoothness_distr
 
                 #smooth_criterion = problem.SmoothnessCriterion(v=interpolate(u, V_exact), mesh=mesh,
@@ -645,6 +649,7 @@ class TestEstimates():
             h_max_array[i] = mesh.hmax()
             h_min_array[i] = mesh.hmin()
 
+            h_min = mesh.hmin()
             print "hmax = ", mesh.hmax()
             print "hmin = ", mesh.hmin()
 
@@ -662,12 +667,12 @@ class TestEstimates():
                                                             num_cells, num_vertices)
 
             # Plot histogram with the error and majorant distribution
-            postprocess.plot_histogram(mesh, ed_distr, md_distr,
-                                       project_path + results_folder + 'e-maj-distr-hist' + results_info)
-            postprocess.plot_histogram_smoothness(mesh, mf_distr, 'k',
-                                       project_path + results_folder + 'mf-distr-hist' + results_info)
-            postprocess.plot_histogram_smoothness(mesh, smoothness_distr, 'b',
-                                       project_path + results_folder + 'smoothness-distr-hist' + results_info)
+            #postprocess.plot_histogram(mesh, ed_distr, md_distr,
+            #                           project_path + results_folder + 'e-maj-distr-hist' + results_info)
+            #postprocess.plot_histogram_smoothness(mesh, mf_distr, 'k',
+            #                           project_path + results_folder + 'mf-distr-hist' + results_info)
+            #postprocess.plot_histogram_smoothness(mesh, smoothness_distr, 'b',
+            #                           project_path + results_folder + 'smoothness-distr-hist' + results_info)
 
             # For the refinement accept the last one change the mesh-dependent values like spaces and mesh functions
             if ref_num > 0 and i + 1 <= ref_num:
@@ -679,6 +684,7 @@ class TestEstimates():
                                                                           project_path, results_folder, results_info)
                     # Save the results in mat-file
                     postprocess.save_results_to_mat_file(ed_distr, md_distr, e_array, maj_array, i_eff_maj_array,
+                                                         e_min_array, min_array,
                                                          mat_file_tag)
 
                     if i + 1 == ref_num: postprocess.save_mesh_to_xml_file(mesh,
@@ -693,10 +699,10 @@ class TestEstimates():
                                 postprocess.plot_mesh(mesh, project_path + results_folder + 'mesh' + results_info)
 
                                 # Plot 'carpets with colored elements' dependent on the error and the majorant
-                                postprocess.plot_carpet_2d(mesh, ed,
-                                                           project_path + results_folder + 'carpet-error' + results_info)
-                                postprocess.plot_carpet_2d(mesh, md,
-                                                           project_path + results_folder + 'carpet-majorant' + results_info)
+                                #postprocess.plot_carpet_2d(mesh, ed,
+                                #                           project_path + results_folder + 'carpet-error' + results_info)
+                                #postprocess.plot_carpet_2d(mesh, md,
+                                #                           project_path + results_folder + 'carpet-majorant' + results_info)
                             elif dim == 3:
                                 postprocess.plot_mesh_3d(mesh, project_path + results_folder + 'initial-mesh')
                 # If the error estimates aren't constructed, the mesh refinement is uniform
@@ -798,7 +804,7 @@ if __name__ == '__main__':
     # ---------------------------------------------------------------------------------------------------------------------#
     # Set the number of the test and call for the problem data
     # ---------------------------------------------------------------------------------------------------------------------#
-    test_num = 56
+    test_num = 53
     u_expr, grad_u_expr, f_expr, A_expr, A_inv_expr, min_eig_A, lambda_expr, a_expr, eps, \
     uD_expr, uN_expr, \
     domain, dim, solution_tag, material_tag, pde_tag = tests[test_num]()
@@ -809,9 +815,9 @@ if __name__ == '__main__':
     test_params = {'refinement_tag': adaptive_tag,
                    'nx0': 8, 'nx1': 8, 'nx2': 8, 'res':  8,
                    'marking_tag': bulk_tag,
-                   'percentage_value': 0.2,
+                   'percentage_value': 0.1,
                    'refinement_criteria_tag': majorant_tag,
-                   'number_of_refinements': 4,
+                   'number_of_refinements': 1,
                    'accuracy_level': 1e-6,
                    'v_approx_order': 1,
                    'flux_approx_order': 2,
@@ -819,7 +825,7 @@ if __name__ == '__main__':
                    'solution_tag': solution_tag,
                    'material_tag':material_tag,
                    'pde_tag': pde_tag,
-                   'majorant_optimization_iterations': 4,
+                   'majorant_optimization_iterations': 8,
                    'error_estimates': True,
                    'MAJORANT_OPTIMIZE': True,
                    'PLOT': True,

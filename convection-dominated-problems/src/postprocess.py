@@ -98,17 +98,19 @@ def document_errors_decay(dim, test_params, decay_result_folder,
     save_to_mat_file(dofs_array, 'dofs_array', decay_result_folder)
     save_to_mat_file(maj_array, 'maj_array', decay_result_folder)
     save_to_mat_file(e_array, 'e_array', decay_result_folder)
+    save_to_mat_file(min_array, 'min_array', decay_result_folder)
 
 
 # Saving data into the mat-file
 def save_to_mat_file(data, data_tag, result_path):
-    scipy.io.savemat(result_path, {data_tag: data})
+    scipy.io.savemat(result_path + '-' + data_tag, {data_tag: data})
 
 
-def save_results_to_mat_file(error_distr, maj_distr, error, majorant, i_eff_maj, result_path):
+def save_results_to_mat_file(error_distr, maj_distr, error, majorant, i_eff_maj, error_min, minorant, result_path):
     scipy.io.savemat(result_path,
                      {'error_distr': error_distr, 'maj_distr': maj_distr,
-                      'error': error, 'majorant': majorant, 'i_eff_maj': i_eff_maj})
+                      'error': error, 'majorant': majorant, 'i_eff_maj': i_eff_maj,
+                      'error_min': error_min, 'minorant': minorant})
 
 # Saveing result mesh into xml file
 def save_mesh_to_xml_file(mesh, file_path, file_tag):
@@ -237,7 +239,7 @@ def output_decay_error_estimates_summary(test_params, d, p, N, h, error, majoran
     print '-------------------------------------------------------------------------------'
 
     for i in range(0, len(h) - 1):
-        h_i = 1 / (N[i] ** (1.0 / d))
+        h_i   = 1 / (N[i] ** (1.0 / d))
         h_ip1 = 1 / (N[i + 1] ** (1.0 / d))
 
         maj_i = majorant[i]
@@ -251,7 +253,7 @@ def output_decay_error_estimates_summary(test_params, d, p, N, h, error, majoran
 
         rate_maj = ln(maj_ip1 / maj_i) / ln(h_ip1 / h_i)
         rate_min = ln(min_ip1 / min_i) / ln(h_ip1 / h_i)
-        rate_e = ln(e_ip1 / min_i) / ln(h_ip1 / h_i)
+        rate_e   = ln(e_ip1   / e_i  ) / ln(h_ip1 / h_i)
 
         print ' %6d & %8.2e & %6.2f & %8.2e & %6.2f & %8.2e & %6.2f \\\\' \
               % (N[i], e_i, rate_e, maj_i, rate_maj, min_i, rate_min)

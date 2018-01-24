@@ -8,8 +8,9 @@ from dolfin import *
 from dolfin.cpp.mesh import cells, BoundaryMesh, CellFunction, SubMesh, Facet, vertices
 import postprocess, integration
 import numpy
-from problem import Grad, Div, D_t
+from problem import Grad, Div, D_t, Laplas, NablaGrad, neumann_bc_marker
 import math
+
 
 def output_optimization_results(iter, maj, m_d, m_f, i_eff, beta, error):
     print 'opt cycle # %d' % iter
@@ -18,14 +19,14 @@ def output_optimization_results(iter, maj, m_d, m_f, i_eff, beta, error):
     print '[e]^2 = %8.2e' % (error)
 
 #def update_majorant_components(u, y, f, c_H, mesh, dim):
-def update_majorant_components(r_d, r_f, eps, mesh):
+def update_majorant_components(r_d, r_f, invA, eps, mesh):
 
-    m_d = assemble(inner(1 / eps * r_d, r_d) * dx(domain=mesh))
+    m_d = assemble(inner(invA * r_d, r_d) * dx(domain=mesh))
     m_f = assemble(inner(r_f, r_f) * dx(domain=mesh))
 
     return m_d, m_f
 
-def calculate_majorant_bar_mu_opt(u, y, beta, f_bar, A, invA, lambda_1, lmbd, mesh, dim, C_FD):
+def calculate_majorant_bar_mu_opt(u, y, beta, f_bar, A, invA, min_eig_A, lmbd, mesh, dim, C_FD):
     """
     :param u: approximate solution
     :param y: flux
@@ -43,17 +44,21 @@ def calculate_majorant_bar_mu_opt(u, y, beta, f_bar, A, invA, lambda_1, lmbd, me
             var_m_d, var_m_f_w_opt: variational form of the majorant (to use them later in construction of error estimators)
     """
     # Define optimal parameters
-    mu_opt = (C_FD ** 2) * (1.0 + beta) * lmbd / (beta * lambda_1 + (C_FD ** 2) * (1.0 + beta) * lmbd)
-    w_opt = (C_FD ** 2) * (1 + beta) / (beta * lambda_1 + (C_FD ** 2) * (1 + beta) * lmbd)
+    mu_opt = (C_FD ** 2) * (1.0 + beta) * lmbd / (beta * min_eig_A + (C_FD ** 2) * (1.0 + beta) * lmbd)
+    #mu_opt = 1
+    w_opt = (C_FD ** 2) * (1.0 + beta) / (beta * min_eig_A + (C_FD ** 2) * (1.0 + beta) * lmbd) # this is the function in front of inner(r_f, r_f)
 
     # Define residuals
-    r_d = y - A * Grad(u, dim)
+    r_d = y - A * NablaGrad(u, dim)
     r_f = (Div(y, dim) + f_bar)
+
+    #r_d = y - eps * A * Grad(u, dim)
+    #r_f = Div(y, dim) + f_bar
 
     # Define variational forms
     var_m_d = inner(invA * r_d, r_d)
     var_m_f_w_opt = w_opt * inner(r_f, r_f)
-    var_m_f_one_minus_mu_opt = ((1 - mu_opt) ** 2) * inner(r_f, r_f)
+    var_m_f_one_minus_mu_opt = ((1 - mu_opt) ** 2) * inner(r_f, r_f) # only for the calculation of optimal beta
 
     # Define majorant components
     m_d = assemble(var_m_d * dx(domain=mesh))
@@ -70,7 +75,7 @@ def calculate_majorant_bar_mu_opt(u, y, beta, f_bar, A, invA, lambda_1, lmbd, me
            maj = (1.0 + beta) * m_d + m_f_w_opt
 
     # Calculate the optimal value for beta parameter
-    beta = C_FD * sqrt(m_f_one_minus_mu_opt / m_d / lambda_1)
+    beta = C_FD * sqrt(m_f_one_minus_mu_opt / m_d / min_eig_A)
 
     return maj, m_d, m_f_one_minus_mu_opt, beta, var_m_d, var_m_f_w_opt
 
@@ -144,7 +149,7 @@ def calculate_majorant_II(m_d, m_f, l, L, m_T, C_FD, gamma):
 
 
 #def get_matrices_of_optimization_problem(H_div, u, f, c_H, mesh, dim):
-def get_matrices_of_optimization_problem(H_div, u, f_bar, eps, mesh, dim):
+def get_matrices_of_optimization_problem(H_div, u, f_bar, invA, mesh, dim):
 
     # Define variational problem
     y = TrialFunction(H_div)
@@ -152,10 +157,12 @@ def get_matrices_of_optimization_problem(H_div, u, f_bar, eps, mesh, dim):
 
     # Define system of linear equation to find the majorant
     S = assemble(inner(Div(y, dim), Div(q, dim)) * dx(domain=mesh))
-    K = assemble(inner(1 / eps * y, q) * dx(domain=mesh))
+    K = assemble(inner(invA * y, q) * dx(domain=mesh))
+    N = assemble(inner(y, q) * ds(neumann_bc_marker))
+
     #z = assemble(inner(- (f - c_H * D_t(u, dim)), Div(q, dim)) * dx(domain=mesh))
     z = assemble(inner(-f_bar, Div(q, dim)) * dx(domain=mesh))
-    g = assemble(inner(Grad(u, dim), q) * dx(domain=mesh))
+    g = assemble(inner(NablaGrad(u, dim), q) * dx(domain=mesh))
 
     return S, K, z, g
 
@@ -221,8 +228,7 @@ def calculate_CF_of_domain(domain, dim):
     return C_FD
 
 
-
-def majorant_nd(u, Ve, y, H_div, f, c_H, eps, lmbd, a, u0, error, mesh, C_FD, dim, test_params):
+def majorant_nd(u, Ve, y, H_div, f, A, invA, min_eig_A, c_H, eps, lmbd, a, u0, error, mesh, C_FD, dim, test_params):
 
     tic()
 
@@ -231,29 +237,20 @@ def majorant_nd(u, Ve, y, H_div, f, c_H, eps, lmbd, a, u0, error, mesh, C_FD, di
     r_b = abs(u0_0 - u_0)
     m_b = assemble(inner(r_b, r_b) * dx(domain=O_mesh))
 
-    #beta = 1.0
     # Define residuals
-    f_bar = f - c_H * D_t(u, dim) #- lmbd * u - a * Grad(u, dim)
-    r_d = eps * Grad(u, dim) - y
-    r_f = Div(y, dim) + f_bar
+    beta = 1.0
+    f_bar = f - c_H * D_t(u, dim) - lmbd * u - inner(a, NablaGrad(u, dim))
+    maj, m_d, m_f, beta, var_m_d, var_m_f_w_opt = calculate_majorant_bar_mu_opt(u, y, beta, f_bar,
+                                                                                A, invA, min_eig_A,
+                                                                                lmbd, mesh, dim, C_FD)
 
-    # Define optimal parameters
-    #mu_opt = (C_FD ** 2) * (1.0 + beta) * eps / (beta * eps + (C_FD ** 2) * (1.0 + beta) * lmbd)
-    #w_opt = (C_FD ** 2) * (1 + beta) / (beta * eps + (C_FD ** 2) * (1 + beta) * lmbd)
-
-    # Define variational forms
-    #var_m_d = inner(invA * r_d, r_d)
-    #var_m_f_w_opt = w_opt * inner(r_f, r_f)
-    #var_m_f_one_minus_mu_opt = ((1 - mu_opt) ** 2) * inner(r_f, r_f)
-
-    # Define majorant components
-    #m_d = assemble(var_m_d * dx(domain=mesh))
-    #m_f_w_opt = assemble(var_m_f_w_opt * dx(domain=mesh))  # for calculating majorant
-    #m_f_one_minus_mu_opt = assemble(var_m_f_one_minus_mu_opt * dx(domain=mesh))  # fo calculating beta_opt
-
-    m_d, m_f = update_majorant_components(r_d, r_f, eps, mesh)
-    maj, beta = calculate_majorant(m_d, m_f, m_b, eps, C_FD)
     i_eff = sqrt(maj / error)
+
+    print " "
+    print '%------------------------------------------------------------------------------------%'
+    print "% Majorant before optimization"
+    print '%------------------------------------------------------------------------------------%'
+    print " "
 
     majorant_reconstruction_time = toc()
     output_optimization_results(-1, maj, m_d, m_f, i_eff, beta, error)
@@ -262,9 +259,15 @@ def majorant_nd(u, Ve, y, H_div, f, c_H, eps, lmbd, a, u0, error, mesh, C_FD, di
         #----------------------------------------------------------------------------#
         # Optimization algorithm
         #----------------------------------------------------------------------------#
+        print " "
+        print "%-----------------------"
+        print "% optimization "
+        print "%-----------------------"
+        print " "
+
         tic()
         #S, K, z, g = get_matrices_of_optimization_problem(H_div, u, f, c_H, mesh, dim)
-        S, K, z, g = get_matrices_of_optimization_problem(H_div, u, f_bar, eps, mesh, dim)
+        S, K, z, g = get_matrices_of_optimization_problem(H_div, u, f_bar, invA, mesh, dim)
 
         y = Function(H_div)
         Y = y.vector()
@@ -276,18 +279,17 @@ def majorant_nd(u, Ve, y, H_div, f, c_H, eps, lmbd, a, u0, error, mesh, C_FD, di
             #list_krylov_solver_preconditioners()
 
             # Solve system with respect to Y
-            solve((C_FD ** 2) / eps * S + beta * K, Y, (C_FD ** 2) / eps * z + beta * g) # lu 3.4 - 3.5
+            solve((C_FD ** 2) / min_eig_A * S + beta * K, Y, (C_FD ** 2) / min_eig_A * z + beta * g) # lu 3.4 - 3.5
             #solve((C_FD ** 2) * S + beta * K, Y, (C_FD ** 2) * z + beta * g, "gmres", "jacobi") # 3.4
             #solve((C_FD ** 2) * S + beta * K, Y, (C_FD ** 2) * z + beta * g, "cg", "ilu") # 3.4
             #solve(C_FD * S + beta * K, Y, C_FD * z + beta * g, "cg", "jacobi")
             #solve(C_FD * S + beta * K, Y, C_FD * z + beta * g, "gmres", "hypre_amg") # 3.4 - 3.5
 
-            # Update residuals
-            r_d = (eps * Grad(u, dim) - y)
-            r_f = (Div(y, dim) + f_bar)
-            # Calculate majorant
-            m_d, m_f = update_majorant_components(r_d, r_f, eps, mesh)
-            maj, beta = calculate_majorant(m_d, m_f, m_b, eps, C_FD)
+            y.vector = Y
+            # Update majorant
+            maj, m_d, m_f, beta, var_m_d, var_m_f_w_opt = calculate_majorant_bar_mu_opt(u, y, beta, f_bar, A, invA,
+                                                                                        min_eig_A,
+                                                                                        lmbd, mesh, dim, C_FD)
             i_eff = sqrt(maj / error)
 
             output_optimization_results(k, maj, m_d, m_f, i_eff, beta, error)
@@ -297,7 +299,7 @@ def majorant_nd(u, Ve, y, H_div, f, c_H, eps, lmbd, a, u0, error, mesh, C_FD, di
 
         majorant_minimization_time = 0.0
 
-    return maj, y, beta, m_d, m_f, r_d, r_f, majorant_reconstruction_time, majorant_minimization_time
+    return maj, y, beta, m_d, m_f, var_m_d, var_m_f_w_opt, majorant_reconstruction_time, majorant_minimization_time
 
 
 
@@ -347,21 +349,20 @@ def majorant_II_nd(u,  Ve, w, W, y, f, u0, error_II, gamma, T, mesh, C_FD, dim, 
 
     return maj_II, beta, majorant_reconstruction_time, majorant_minimization_time
 
-def error_majorant_distribution_nd(e, u, f, c_H, eps, y, beta, C_FD, mesh, dim, V_exact):
-
+def error_majorant_distribution_nd(mesh, dim, V_exact,
+                                   var_grad_e, var_delta_e, var_m_d, var_m_f_w_opt,
+                                   beta, C_FD):
     cell_num = mesh.num_cells()
     ed_distr = postprocess.allocate_array(cell_num)
+    delta_e_distr = postprocess.allocate_array(cell_num)
     md_distr = postprocess.allocate_array(cell_num)
     maj_distr = postprocess.allocate_array(cell_num)
 
-    # Define error and residuals
-    r_d = (eps * Grad(u, dim) - y)
-    r_f = (f + Div(y, dim) - c_H * D_t(u, dim))
-
     # Project UFL forms on the high-order functional space to obtain functions
-    ed = project((inner(eps * Grad(e, dim), Grad(e, dim))), V_exact)
-    md = project((inner(1 / eps * r_d, r_d)), V_exact)
-    mdf = project(((1 + beta) * inner(1 / eps * r_d, r_d) + C_FD**2 / eps * (1 + 1 / beta) * inner(r_f, r_f)), V_exact)
+    ed = project((var_grad_e), V_exact)
+    delta_e = project(var_delta_e, V_exact)
+    md = project((var_m_d), V_exact)
+    mf_wopt = project(var_m_f_w_opt, V_exact)
 
     scheme_order = 4
     gauss = integration.SpaceIntegrator(scheme_order, dim)
@@ -380,12 +381,19 @@ def error_majorant_distribution_nd(e, u, f, c_H, eps, y, beta, C_FD, mesh, dim, 
 
         # Integrating over the cell
         ed_distr[c.index()] = gauss.integrate(ed, meas, x_n_transpose)
+        delta_e_distr[c.index()] = gauss.integrate(delta_e, meas, x_n_transpose)
         md_distr[c.index()] = gauss.integrate(md, meas, x_n_transpose)
-        maj_distr[c.index()] = gauss.integrate(mdf, meas, x_n_transpose)
+        #maj_distr[c.index()] = gauss.integrate(mdf, meas, x_n_transpose)
 
-    print 'sum of maj_cells', numpy.sum(maj_distr)
-    print 'sum of md_cells', numpy.sum(md_distr)
-    print 'sum of ed_cells', numpy.sum(ed_distr)
+    #print 'num md_cells', md_distr
+    #print 'ed_cells', ed_distr
+    #print 'delta_e_cells', delta_e_distr
+
+    #print 'maj_cells', maj_distr
+    #print 'e_cells', e_distr
+
+    print '\nmd = Sum_K md_K = %8.2e' % sum(md_distr)
+    print 'ed = Sum_K ed_K = %8.2e' % sum(ed_distr)
 
     return ed_distr, md_distr, maj_distr
 
@@ -411,43 +419,86 @@ def get_2d_slice_of_3d_function_on_Oz(mesh, u, T, dim, v_degree):
 
     # create a FunctionSpace on the submesh-
     Vs = FunctionSpace(submesh, "Lagrange", v_degree)
-
     us = interpolate(u, Vs)
 
     return us, submesh
 
-def error_norm(mesh, u, ue, lmbd, a, T, dim, v_degree, V, Ve):
+def error_norm(u, ue, A, lmbd, a, f, c_H, v_degree, mesh, T, dim, V, Ve):
+
     """
     :param u: approximate solution
     :param ue: exact solution
+    :param A:
+    :param lmbd:
+    :param lambd:
+
     :param Ve: functional space of exact solution
     :return: L2 error-norm between u and ue
     """
     u_ve = interpolate(u, Ve)
     u_exact_ve = interpolate(ue, Ve)
     e = abs(u_ve - u_exact_ve)
+    #e = (u_ve - u_exact_ve)
 
-    var_e = inner(e, e) * dx(domain=mesh)
-    val_e = assemble(var_e)
+    res = Div(A * NablaGrad(u, dim), dim) \
+          + f \
+          - c_H * D_t(u, dim) \
+          - lmbd * u \
+          - inner(a, NablaGrad(u, dim))
 
-    var_delta_e = inner((lmbd - 0.5 * Div(a, dim)) * e, e) * dx(domain=mesh)
-    val_delta_e = assemble(var_delta_e)
-    #val_delta_e = 0
+    var_e        = inner(e, e)
+    var_delta_e  = inner((lmbd - 0.5 * Div(a, dim)) * e, e)
+    var_lambda_e = lmbd * inner(e, e)
+    var_grad_e   = inner(A * NablaGrad(e, dim), NablaGrad(e, dim))
+    var_e_t      = inner(c_H * D_t(e, dim), c_H * D_t(e, dim))
+    var_laplas_e = inner(Div(A * NablaGrad(e, dim), dim), Div(A * NablaGrad(e, dim), dim))
+    var_e_id     = inner(res, res)
 
-    var_grad_e = inner(Grad(e, dim), Grad(e, dim)) * dx(domain=mesh)
-    val_grad_e = assemble(var_grad_e)
+    val_e        = assemble(var_e * dx(domain=mesh))
+    val_delta_e  = assemble(var_delta_e * dx(domain=mesh))
+    val_lmbd_e   = assemble(var_lambda_e * dx(domain=mesh))
+    val_grad_e   = assemble(var_grad_e * dx(domain=mesh))
+    val_e_t      = assemble(var_e_t * dx(domain=mesh))
+    val_laplas_e = assemble(var_laplas_e * dx(domain=mesh))
 
-    u_T, T_mesh = get_2d_slice_of_3d_function_on_Oz(mesh, u_ve, T, dim, v_degree)
-    ue_T, T_mesh = get_2d_slice_of_3d_function_on_Oz(mesh, u_exact_ve, T, dim, v_degree)
-    e_T_var = abs(ue_T - u_T)
-    e_T = assemble(inner(e_T_var, e_T_var) * dx(domain=T_mesh))
+    val_e_id     = assemble(var_e_id * dx(domain=mesh))
 
-    print "||e||^2_Q         = %2.4e" % val_e
-    print "||delta * e||^2_Q = %2.4e" % val_delta_e
-    print "||grad e||^2_Q    = %2.4e" % val_grad_e
-    print "||e||^2_{Sigma_T} = %2.4e" % e_T
+    u_T, mesh_T  = get_2d_slice_of_3d_function_on_Oz(mesh, u_ve, T, dim, v_degree)
+    ue_T, mesh_T = get_2d_slice_of_3d_function_on_Oz(mesh, u_exact_ve, T, dim, v_degree)
+    var_e_T      = abs(ue_T - u_T)
+    val_e_T      = assemble(inner(var_e_T, var_e_T) * dx(domain=mesh_T))
 
-    return e, val_e, val_grad_e, val_delta_e, e_T
+    u_0, mesh_0  = get_2d_slice_of_3d_function_on_Oz(mesh, u_ve, 0.0, dim, v_degree)
+    ue_0, mesh_0 = get_2d_slice_of_3d_function_on_Oz(mesh, u_exact_ve, 0.0, dim, v_degree)
+    var_e_0 = abs(ue_0 - u_0)
+    val_e_0 = assemble(inner(A * var_e_0, var_e_0) * dx(domain=mesh_0))
+
+    print '%------------------------------------------------------------------------------------%'
+    print '% Error '
+    print '%------------------------------------------------------------------------------------%\n'
+    print "\| grad_x e \|^2_A               = %8.2e" % val_grad_e
+    print "\| e \|^2                        = %8.2e" % val_e
+    print "\| (lmbd - 0.5 div a)^0.5 e \|^2 = %8.2e" % val_delta_e
+    print "\| lmbd^0.5 e \|^2               = %8.2e\n" % val_lmbd_e
+
+    print "\| laplas e \|^2                 = %8.2e" % val_laplas_e
+    print "\| e_t \|^2                      = %8.2e" % val_e_t
+    print "\| r_v \|^2                      = %8.2e" % val_e_id
+
+    print "\| e \|^2_T                      = %8.2e" % val_e_T
+    print "\| e \|^2_0                      = %8.2e\n" % val_e_0
+    #print "\| grad_x e \|^2_T               = %8.2e" % val_grad_e_T
+    #print "\| grad_x e \|^2_0               = %8.2e\n" % val_grad_e_0
+
+    print '%------------------------------------------------------------------------------------%'
+    print '% Error identity '
+    print '%------------------------------------------------------------------------------------%\n'
+
+    print "id = \| e \|^2_T + \| r_v \|^2               = %8.2e" % (val_e_T + val_e_id)
+    print "\| laplas e \|^2 + \| e_t \|^2 + \| e \|^2_0 = %8.2e\n" % (val_e_0 + val_laplas_e + val_e_t + val_delta_e)
+
+    return e, val_e, val_grad_e, val_delta_e, val_e_T, val_laplas_e + val_e_t, val_e_id, \
+           var_e, var_delta_e, var_grad_e
 
 def minorant(u, mesh, Vh, u0, u0_boundary, f, dim, error):
 
@@ -455,8 +506,8 @@ def minorant(u, mesh, Vh, u0, u0_boundary, f, dim, error):
     w = TrialFunction(Vh)
     mu = TestFunction(Vh)
 
-    a = inner(Grad(w, dim), Grad(mu, dim)) * dx(domain=mesh)
-    L = (f * mu - inner(Grad(u, dim), Grad(mu, dim))) * dx(domain=mesh)
+    a = inner(NablaGrad(w, dim), NablaGrad(mu, dim)) * dx(domain=mesh)
+    L = (f * mu - inner(NablaGrad(u, dim), Grad(mu, dim))) * dx(domain=mesh)
 
     w = Function(Vh)
 
@@ -472,9 +523,14 @@ def minorant(u, mesh, Vh, u0, u0_boundary, f, dim, error):
     return min, w
 
 def output_result_error_and_majorant(error, majorant, i_eff_maj):
+
+    print '\n%------------------------------------------------------------------------------------%'
+    print '% Majorant '
+    print '%------------------------------------------------------------------------------------%\n'
+
     print '[e]       = %8.4e ' % (error)
     print 'maj       = %8.4e' % (majorant)
-    print 'i_eff_maj = %.4f' % (i_eff_maj)
+    print 'i_eff_maj = %.4f\n' % (i_eff_maj)
 
 def output_result_minorant(minorant, i_eff_min):
     print 'minorant  = %8.4e' % (minorant)
@@ -637,7 +693,7 @@ def get_indicators_CG0(e_form, norm_grad_e, V, V_star, f, u0, u0_boundary, u, u_
 
     return eta_distr, E_DWR_distr, J_e_distr
 
-def majorant_distribution_using_DG0(e_form, r_d, r_f, eps, beta, C_FD, mesh, dim):
+def majorant_distribution_using_DG0(e_form, r_d, r_f, A, invA, min_eig_A, beta, C_FD, mesh, dim):
 
     # Define the functional space used for distribution over cells
     DG0 = FunctionSpace(mesh, "DG", 0)
@@ -648,9 +704,9 @@ def majorant_distribution_using_DG0(e_form, r_d, r_f, eps, beta, C_FD, mesh, dim
     e_DG0 = Function(DG0)
 
     # Define variational forms of dual component of majorant and the whole functional
-    m_d_var = w * (inner(1 / eps * r_d, r_d)) * dx(domain=mesh)
-    m_df_var = w * ((1.0 + beta) * inner(1 / eps * r_d, r_d) + C_FD**2 / eps * (1 + 1 / beta) * inner(r_f, r_f)) * dx(domain=mesh)
-    e_var = w * (inner(eps * Grad(e_form, dim), Grad(e_form, dim))) * dx(domain=mesh)
+    m_d_var = w * (inner(invA * r_d, r_d)) * dx(domain=mesh)
+    m_df_var = w * ((1.0 + beta) * inner(invA * r_d, r_d) + C_FD**2 / min_eig_A * (1 + 1 / beta) * inner(r_f, r_f)) * dx(domain=mesh)
+    e_var = w * (inner(A * Grad(e_form, dim), Grad(e_form, dim))) * dx(domain=mesh)
 
     # Assemble the variation form and dumping obtained vector into function from DG0
     assemble(m_d_var, tensor=m_d_DG0.vector())

@@ -114,6 +114,7 @@ def _text_position(x0, dx, scale='linear'):
 
 
 def _slope_triangle(origin, dx, dy, ec='none', fc='0.8', **poly_kwargs):
+
     """Return Polygon representing slope.
           /|
          / | dy
@@ -122,7 +123,7 @@ def _slope_triangle(origin, dx, dy, ec='none', fc='0.8', **poly_kwargs):
     """
     verts = [np.asarray(origin)]
     verts.append(verts[0] + (dx, 0))
-    verts.append(verts[0] + (dx, dy))
+    verts.append(verts[0] + (0, dy))
     return plt.Polygon(verts, ec=ec, fc=fc, **poly_kwargs)
 
 

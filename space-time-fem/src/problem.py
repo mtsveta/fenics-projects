@@ -1,9 +1,17 @@
+from dolfin.cpp.mesh import MeshFunction
+
 __author__ = 'svetlana'
 
 from dolfin import *
 from numpy import info
 
 expression_degree = 6
+INFTY = 1e16
+
+dirichlet_bc_marker = 1
+neumann_bc_marker = 2
+init_bc_marker = 3
+do_nothing_bc_marker = 4
 
 def SpaceDiv(f, dim):
     # Define differential operators for the 1D case
@@ -28,6 +36,17 @@ def Grad(f, dim):
     #grad_f = space_matrix * grad(f)
 
     return grad_f
+
+def Laplas(f, dim):
+
+    # Define Laplas for the different dimensions case for space
+    if dim == 2:
+        laplas_f = f.dx(0).dx(0)
+    elif dim == 3:
+        laplas_f = f.dx(0).dx(0) + f.dx(1).dx(1)
+
+    return laplas_f
+
 
 def NablaGrad(f, dim):
     if dim == 2:
@@ -103,7 +122,7 @@ def output_problem_characteristics(test_num, u_expr, grad_u_expr, f_expr,
 
 # Function to solve convection-reaction-diffusion
 def solve_convection_reaction_diffusion(V, c_H, eps, f, A, min_eigs_A, lmbd, a,
-                                        u0, uD,
+                                        u0, uD, uN,
                                         mesh, boundary_facets,
                                         dim, test_num, test_params):
     """
@@ -126,70 +145,86 @@ def solve_convection_reaction_diffusion(V, c_H, eps, f, A, min_eigs_A, lmbd, a,
 
     # Define the stabilization parameter delta element-wise
     if test_params["STABILIZE"]:
-        delta = DeltaExpression(eps=eps, a=interpolate(Expression(str(c_H), degree=expression_degree), V), mesh=mesh)
-        #delta = 0.5 * CellSize(mesh) / norm(a.vector(), 'linf')
+        #fe = dolfin.TensorElement(family="Lagrange", cell=mesh.ufl_cell(), degree=3, quad_scheme="Default")
+        fe = dolfin.FiniteElement("CG", cell=mesh.ufl_cell(), degree=3)
+        #fe = dolfin.Element("Quadrature", cell=mesh.ufl_cell(), degree=3, quad_scheme="Default", dim=dim)
+        delta = DeltaExpression(eps=eps, a=interpolate(Expression(str(c_H), degree=3, element=fe), V), mesh=mesh, element=fe)
+        #delta = 0.5 * CellSize(mesh) / norm(c_H, 'linf')
     else:
         delta = 0.0
 
-
     # SUPG stabilization
-    '''
-    test = inner(a, NablaGrad(v, dim)) + c_H * D_t(v, dim)
-    s_stab = delta * (inner(c_H * D_t(u, dim)
-                            - eps * Div(NablaGrad(u, dim), dim)
+    upwind = c_H * delta * D_t(v, dim) # with upwind
+    #upwind = 0
+    s_stab = delta * inner(c_H * D_t(u, dim)
+                            - Div(A * NablaGrad(u, dim), dim)
                             + lmbd * u
                             + inner(a, NablaGrad(u, dim)),
-                            inner(a, NablaGrad(v, dim)) + c_H * D_t(v, dim))) * dx(domain=mesh)
-    l_stab = delta * (inner(f, inner(a, Grad(v, dim)) + c_H * D_t(v, dim))) * dx(domain=mesh)
-    '''
-    s_stab = 0
-    l_stab = 0
+                           upwind) * dx(domain=mesh)
+    l_stab = delta * inner(f, upwind) * dx(domain=mesh)
+
     # Bilinear form
     a_stab = (c_H * inner(D_t(u, dim), v)
-              + inner(eps * NablaGrad(u, dim), NablaGrad(v, dim)) ) * dx(domain=mesh)
-              # + inner(A * Grad(u, dim), Grad(v, dim))
-              # + inner(lmbd * u, v)
-              # + inner(inner(a, NablaGrad(u, dim)), v)) * dx(domain=mesh) \
-              # + s_stab
-
+                + inner(A * NablaGrad(u, dim), NablaGrad(v, dim))
+                + inner(lmbd * u, v)
+                + inner(inner(a, NablaGrad(u, dim)), v)) * dx(domain=mesh) \
+              + s_stab
     L_stab = (f * v) * dx(domain=mesh) \
+              + (uN * v) * ds(neumann_bc_marker) \
               + l_stab
+
+    '''
+    theta = delta # depending on delta or just a constant
+    test_func = v + c_H * theta * delta * D_t(v, dim)
+
+    a_stab = (c_H * inner(D_t(u, dim), test_func),
+              + inner(A * NablaGrad(u, dim), NablaGrad(test_func, dim))
+              + inner(inner(a, NablaGrad(u, dim)), test_func)) * dx(domain=mesh)
+
+    L_stab = (f * test_func) * dx(domain=mesh) \
+             + (uN * test_func) * ds(neumann_bc_marker)
+    '''
     # Define the unknown function
     u = Function(V)
 
+
     # Define boundary condition
-    if test_num == 11 or test_num == 12 or \
-       test_num == 13 or test_num == 15 or test_num == 15:
-        bcs = [DirichletBC(V, uD, boundary_facets, 0),
-               DirichletBC(V, u0, boundary_facets, 1)]  # bottom with initial condition
+    if test_num == 24 or test_num == 38 or test_num == 39 or test_num == 40 or test_num == 41 or test_num == 42: #  or test_num == 25
+        bcs = [DirichletBC(V, u0, boundary_facets, init_bc_marker)]  # bottom of the cylinder with IC
     else:
-        bcs = [DirichletBC(V, uD, boundary_facets, 0)]
+        bcs = [DirichletBC(V, uD, boundary_facets, dirichlet_bc_marker),  # lateral surface Dirichlet BC
+               DirichletBC(V, u0, boundary_facets, init_bc_marker)]  # bottom of the cylinder with IC
+        # top of the cylinder is do-nothing condition
 
     # Solve the system generated by the variational equation a(u, v) = f(v)
     solve(a_stab == L_stab, u, bcs)
 
-    return u
+    return u, delta
 
 
-def solve_parabolic_problem(V, c_H, eps, f, u0, uD, mesh, boundary_facets, dim, test_num):
+def solve_parabolic_problem(V, c_H, eps, f, A, u0, uD, mesh, boundary_facets, dim, test_num):
 
     # Define variational problem
     u = TrialFunction(V)
     v = TestFunction(V)
 
     a = (c_H * inner(D_t(u, dim), v)
-         + inner(eps * NablaGrad(u, dim), NablaGrad(v, dim))) * dx(domain=mesh)
+         + inner(A * NablaGrad(u, dim), NablaGrad(v, dim))) * dx(domain=mesh)
     L = f * v * dx(domain=mesh)
 
     u = Function(V)
 
+    # Define boundary condition
+    bcs = [DirichletBC(V, uD, boundary_facets, 0),  # lateral surface Dirichlet BC
+           DirichletBC(V, u0, boundary_facets, 1)]  # bottom of the cylinder with IC
+    """
     # Define boundary condition
     if test_num == 11 or test_num == 12 or test_num == 13:
         bcs = [DirichletBC(V, uD, boundary_facets, 0),
                DirichletBC(V, u0, boundary_facets, 1)]  # bottom with initial condition
     else:
         bcs = [DirichletBC(V, uD, boundary_facets, 0)]
-
+    """
     solve(a == L, u, bcs)
 
     return u
@@ -197,60 +232,64 @@ def solve_parabolic_problem(V, c_H, eps, f, u0, uD, mesh, boundary_facets, dim, 
 
 def calculate_CF_of_domain(domain, dim):
 
-    if domain == "l-shape-domain" and dim == 3:
+    height = INFTY
+    width  = INFTY
+    length = INFTY
 
-        height = 1
-        width = 2
-        length = 2
-        C_FD = 1.0 / DOLFIN_PI / sqrt(1.0 / height**2 + 1.0 / width**2 + 1.0 / length**2)
+    if domain == "l-shape-domain" and dim == 2:
 
-    elif domain == "1times1-minus-0times0" and dim == 3:
+        height = 1.0
+        width = 2.0
 
-        height = 2
-        width = 2
-        length = 2
+    elif domain == "1times1-minus-0times0" and dim == 2:
 
-        C_FD = 1.0 / DOLFIN_PI / sqrt(1.0 / height**2 + 1.0 / width**2 + 1.0 / length**2)
+        height = 2.0
+        width = 2.0
 
     elif domain == "unit-domain":
 
-        height = 1
-        width = 1
-        length = 1
-
         if dim == 3:
-            C_FD = 1.0 / DOLFIN_PI / sqrt(1.0 / height**2 + 1.0 / width**2 + 1.0 / length**2)
+            length = 1.0
+            height = 1.0
+            width = 1.0
+
         elif dim == 2:
-            C_FD = 1.0 / DOLFIN_PI / sqrt(1.0 / width**2 + 1.0 / length**2)
+            height = 1.0
+            width = 1.0
+
         elif dim == 1:
-            C_FD = 1.0 / DOLFIN_PI / sqrt(1.0 / length**2)
+            width = 1.0
 
     elif domain == "long-rectangle-domain":
 
-        width = 3.0
-        length = 1.0
+        if dim == 2:
+            width = 3.0
 
-        if dim == 1:
-            C_FD = 1.0 / DOLFIN_PI / sqrt(1.0 / length ** 2)
-
-    elif domain == "rectangular-domain-1x2":
+    elif domain == "rectangular-domain-1x2" and dim == 1:
         width = 2.0
-        length = 1.0
 
-        if dim == 1:
-            C_FD = 1.0 / DOLFIN_PI / sqrt(1.0 / length ** 2)
+    elif domain == "10byT-domain" and dim == 1:
+        width = 2.0
 
-
-    elif domain == "l-shape-domain" and dim == 2:
-
-        width = 2
-        length = 2
-
-        C_FD = 1.0 / DOLFIN_PI / sqrt(1.0 / width**2 + 1.0 / length**2)
-
+    C_FD = 1.0 / DOLFIN_PI / sqrt(1.0 / height**2 + 1.0 / width**2 + 1.0 / length**2)
     print "C_FD = 1 / pi / (h_1^(-2) + ... + h_n^(-2)) = ", C_FD
 
     return C_FD
+
+def calculate_trace_constant(test_num):
+
+    # No Neumann part of the boundary
+    C_Ntr = 0.0
+
+    # Mark different parts of the domain for non-homogeneous Dirichlet BC
+    if test_num == 48:
+        # Caclulated in the matlab
+        C_Ntr = 1.47
+
+    if test_num == 38 and test_num == 39:
+        # Caclulated in the matlab
+        C_Ntr = 1.47
+    return C_Ntr
 
 
 # Class for delta-stabilization parameter (inherited from Expression)
@@ -262,10 +301,13 @@ class DeltaExpression(Expression):
     :return: values of the delta function defined element-wise
     """
 
-    def __init__(self, eps, a, mesh):
+    def __init__(self, eps, a, mesh, element):
+        #super(DeltaExpression, self).__init__(**kwargs)
         self._eps = eps
         self._a = a
         self._mesh = mesh
+        self._element = element
+
 
     # Redefine eval_cell function
     def eval_cell(self, value, x, ufc_cell):
@@ -308,7 +350,9 @@ def interpolate_vector_function(a, dim, V_exact, VV_exact):
     :return: interpolated vector fucntion
     """
     if dim == 2:
+        #a_interpolated = a
         a_interpolated = interpolate(a, V_exact)
+        #a_interpolated = project(a, V_exact)
     else:
         a_interpolated = interpolate(a, VV_exact)
         #a_interpolated = project(a, VV_exact)
