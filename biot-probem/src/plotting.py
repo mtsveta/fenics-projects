@@ -465,7 +465,9 @@ def plot(object, *args, **kwargs):
                   "and projection failed:\n  %s" % (str(object), str(e))
             cpp.dolfin_error("plotting.py", "plot object", msg)
 
+    return _plot_matplotlib(object, mesh, kwargs)
     # Select backend
+    '''
     backend = kwargs.pop("backend", None) or cpp.parameters["plotting_backend"]
     if backend == "vtk":
         return _plot_cpp(object, mesh, kwargs)
@@ -477,3 +479,4 @@ def plot(object, *args, **kwargs):
     else:
         cpp.dolfin_error("plotting.py", "plot object",
                          "Unknown plotting backend '%s'" % backend)
+    '''

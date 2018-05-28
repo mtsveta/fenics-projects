@@ -1,20 +1,22 @@
 __author__ = 'svetlana'
 
 from dolfin import *
-from dolfin.cpp.mesh import cells, CellFunctionSizet, CellFunctionDouble, CellFunctionInt, Mesh, MeshEditor
-import plotslopes
+from dolfin.cpp.mesh import CellFunctionSizet, CellFunctionDouble, CellFunctionInt, Mesh, MeshEditor
 
 import scipy.io
 import os, sys
 import numpy as np
+import math
 
 from matplotlib import cm
 import matplotlib.pyplot as plt
 import matplotlib.tri as tri
 import matplotlib
 import plotting
-parameters["plotting_backend"] = "matplotlib"
 
+#parameters["plotting_backend"] = "matplotlib"
+
+import dolfin.cpp.mesh
 
 # -------------------------------------------------------------------------------------------------------------------- #
 # IO functions
@@ -63,47 +65,67 @@ def save_to_mat_file(data, data_tag, result_path):
 # Plotting the problem data
 def output_problem_characteristics(test_num, mesh, problem_data, domain_params, material_params, test_params, func_spaces):
 
-    print "test: ", test_num
-    print "domain: ", domain_params['domain_type']
-    print "l_x: ", domain_params['l_x']
-    print "l_y: ", domain_params['l_y']
-    print "l_z: ", domain_params['l_z']
-    print "gdim: ", domain_params['gdim']
+    print("test: ", test_num)
+    print("domain: ", domain_params['domain_type'])
+    print("l_x: ", domain_params['l_x'])
+    print("l_y: ", domain_params['l_y'])
+    print("l_z: ", domain_params['l_z'])
+    print("gdim: ", domain_params['gdim'])
 
-    print "u_expr: ", problem_data['u_expr']
-    print "p_expr: ", problem_data['p_expr']
-    print "t_T: ", problem_data['t_T']
+    print("u_expr: ", problem_data['u_expr'])
+    print("p_expr: ", problem_data['p_expr'])
+    print("t_T: ", problem_data['t_T'])
 
-    print "M: ", material_params['M']
-    print "alpha: ", material_params['alpha']
-    print "mu_f: ", material_params['mu_f']
-    print "nu: ", material_params['nu']
-    print "mu: ", material_params['mu']
-    print "E: ", material_params['E']
-    print "kappa: ", material_params['kappa']
+    print("M: ", material_params['M'])
+    print("alpha: ", material_params['alpha'])
+    print("mu_f: ", material_params['mu_f'])
+    print("nu: ", material_params['nu'])
+    print("mu: ", material_params['mu'])
+    print("E: ", material_params['E'])
+    print("kappa: ", material_params['kappa'])
 
-    print 'mesh parameters: time steps = %d, num_cells = %d, num_vertices = %d' \
-          % (test_params["time_steps"], mesh.num_cells(), mesh.num_vertices())
-    print 'h_max = ', mesh.hmax()
-    print 'h_min = ', mesh.hmin()
-    print "u_approx_order = ", test_params["u_approx_order"]
-    print "p_approx_order = ", test_params["p_approx_order"]
-    print "DOFs of u = ", len(func_spaces["V"].dofmap().dofs())
-    print "DOFs of p = ", len(func_spaces["Q"].dofmap().dofs())
+    print('mesh parameters: time steps = %d, num_cells = %d, num_vertices = %d'
+          % (test_params["time_steps"], mesh.num_cells(), mesh.num_vertices()))
+    print('h_max = ', mesh.hmax())
+    print('h_min = ', mesh.hmin())
+    print("u_approx_order = ", test_params["u_approx_order"])
+    print("p_approx_order = ", test_params["p_approx_order"])
+    print("DOFs of u = ", len(func_spaces["V"].dofmap().dofs()))
+    print("DOFs of p = ", len(func_spaces["Q"].dofmap().dofs()))
 
+    print("iter_num = ", test_params["iter_num"])
 
-    print "iter_num = ", test_params["iter_num"]
+def print_biot_iterative_coupling_parameters(beta, L, q):
+    print('beta = ', float(beta))
+    print('L = ', float(L))
+    print('q = ', float(q))
 
 # Outputting to the consol the results of the interation procedure
-def output_errors_wrt_iterations(e_u_array, e_p_array, ITER_NUM):
+def output_errors_wrt_iterations(ep_array, epl2_array, eu_array, eudiv_array, ITER_NUM):
 
-    print ""
-    print "iter # | e_p         | e_u "
-    print "--------------------------------"
+    print("")
+    print("iter # | ||| e_p |||^2   | || e_p ||^2_{L2}  | ||| e_u |||^2   | || div e_u ||^2  ")
+    print("----------------------------------------------------------------------------------")
 
-    for i in range(0, ITER_NUM):
-        print "    %2d | %.4e  | %.4e    " % (i, e_p_array[i], e_u_array[i])
-    print ""
+    for i in range(1, ITER_NUM):
+        print("    %2d | %10.4e | %10.4e | %10.4e  | %10.4e " % (i, ep_array[i], epl2_array[i], eu_array[i], eudiv_array[i]))
+    print("")
+
+# Outputting to the consol the results of the interation procedure
+def output_errors_and_estimates_wrt_iterations(ep_array, epl2_array, eu_array, eudiv_array,
+                                               maj_ep_array, maj_epl2_array, maj_eu_array, maj_eudiv_array, ITER_NUM):
+
+    print("")
+    print("iter # | ||| e_p |||^2   M^2_p     | || e_p ||^2_{L2}    M^2_{L2}  | ||| e_u |||^2   M^2_{u}    | || div e_u ||^2    M^2_{divu}")
+    print("--------------------------------------------------------------------------------------------------------------------------------------")
+
+    for i in range(1, ITER_NUM):
+        print("    %2d | %10.4e     %10.4e | %14.4e     %10.4e | %10.4e     %10.4e  | %14.4e     %10.4e "
+              % (i, ep_array[i], maj_ep_array[i],
+                 epl2_array[i], maj_epl2_array[i],
+                 eu_array[i], maj_eu_array[i],
+                 eudiv_array[i], maj_eudiv_array[i]))
+    print("")
 
 # -------------------------------------------------------------------------------------------------------------------- #
 # Plotting functions
@@ -139,7 +161,7 @@ def plot_function_1d(mesh, f, result_path):
     num_vert = mesh.num_vertices()
 
     fig = plt.gcf()
-    plotting.plot(f)
+    plot(f)
     fig.savefig(result_path + "-cells-%d-vertices-%d.eps" % (num_cells, num_vert))
 
     """
@@ -169,6 +191,7 @@ def plot_function_2d(mesh, f, result_path):
 
     d = mesh.geometry().dim()
 
+    plt.figure()
     plotting.plot(f, mode='color', cmap=cm.BrBG, edgecolors='k', mesh=mesh)
 
     # Create the triangulation
@@ -178,11 +201,12 @@ def plot_function_2d(mesh, f, result_path):
     #                                  mesh_coordinates[:, 1],
     #                                  triangles)
 
-    '''
+
     # Get the z values as face colors for each triangle(midpoint)
+    '''
     plt.figure()
-    zfaces = np.asarray([f(cell.midpoint()) for cell in cells(mesh)])
-    plt.tripcolor(triangulation, facecolors=zfaces, edgecolors='k')
+    zfaces = np.asarray([f(cell.midpoint()) for cell in dolfin.cells(mesh)])
+    plt.tripcolor(tri.triangulation, facecolors=zfaces, edgecolors='k')
     fig = plt.gcf()
 
     fig.savefig(result_path + '-zfaces-cells-%d-vertices-%d.eps' %(num_cells, num_vert))
@@ -208,7 +232,7 @@ def plot_function_3d(mesh, f, result_path):
     d = mesh.geometry().dim()
 
     mesh_coordinates = mesh.coordinates().reshape((num_vert, d))
-    triangles = np.asarray([cell.entities(0) for cell in cells(mesh)])
+    triangles = np.asarray([cell.entities(0) for cell in dolfin.cpp.mesh.cells(mesh)])
     triangulation = tri.Triangulation(mesh_coordinates[:, 0],
                                       mesh_coordinates[:, 1],
                                       triangles)
@@ -269,7 +293,7 @@ def plot_vector_function_2d(mesh, f, result_path):
 def plot_mesh(mesh, result_path):
 
     plt.figure()
-    plt.hold(True)
+    #plt.hold(True)
 
     # change the font
     matplotlib.rcParams.update({'font.size': 10,
@@ -307,7 +331,7 @@ def plot_carpet_2d(mesh, f, result_path):
 
     # Create the triangulation
     mesh_coordinates = mesh.coordinates().reshape((num_vert, d))
-    triangles = np.asarray([cell.entities(0) for cell in cells(mesh)])
+    triangles = np.asarray([cell.entities(0) for cell in dolfin.cpp.mesh.cells(mesh)])
     triangulation = tri.Triangulation(mesh_coordinates[:, 0],
                                       mesh_coordinates[:, 1],
                                       triangles)
@@ -363,8 +387,10 @@ def mplot_function(f):
         return plt.quiver(X,Y,U,V)
 
 # Plot a generic dolfin object (if supported)
+
 def plot(obj):
     plt.gca().set_aspect('equal')
+
     if isinstance(obj, Function):
         return mplot_function(obj)
     elif isinstance(obj, CellFunctionSizet):
@@ -374,8 +400,7 @@ def plot(obj):
     elif isinstance(obj, CellFunctionInt):
         return mplot_cellfunction(obj)
     elif isinstance(obj, Mesh):
-
-        print "CHECK!"
+        print("CHECK!")
 
     if (obj.geometry().dim() != 2):
         raise AttributeError('Mesh must be 2D')
@@ -394,7 +419,7 @@ def create_line_mesh(vertices):
     cellname = "interval"
 
     # Indirect error checking and determination of tdim via ufl
-    ufl_cell = ufl.Cell(cellname, gdim)
+    ufl_cell = Cell(cellname, gdim)
     assert tdim == ufl_cell.topological_dimension()
 
     # Create mesh to return
@@ -433,16 +458,16 @@ def line1d():
 def line2d():
     n = 100
     us = [i/float(n-1) for i in range(n)]
-    vertices = [(cos(1.5*DOLFIN_PI*u),
-                 sin(1.5*DOLFIN_PI*u))
+    vertices = [(math.cos(1.5 * DOLFIN_PI * u),
+                 math.sin(1.5 * DOLFIN_PI * u))
                  for u in us]
     return create_line_mesh(vertices)
 
 def line3d():
     n = 100
     us = [i/float(n-1) for i in range(n)]
-    vertices = [(cos(4.0*DOLFIN_PI*u),
-                 sin(4.0*DOLFIN_PI*u),
+    vertices = [(math.cos(4.0 * DOLFIN_PI * u),
+                 math.sin(4.0 * DOLFIN_PI * u),
                  2.0*u)
                  for u in us]
     return create_line_mesh(vertices)

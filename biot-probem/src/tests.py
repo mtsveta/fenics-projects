@@ -8,7 +8,7 @@ from dolfin import *
 
 def coeff_sum_term_1(alpha_n): return sin(alpha_n) / (alpha_n - sin(alpha_n) * cos(alpha_n))
 
-def manuel_example_2d_t():
+def manual_example_2d_t():
 
     u_0_expr = '(1 - x[0]) * x[0] * (1 - x[1]) * x[1] * t'
     u_1_expr = '(1 - x[0]) * x[0] * (1 - x[1]) * x[1] * t'
@@ -101,7 +101,8 @@ def simple_example_2d_t():
     f_1_expr = '+ alpha * x[0] * (1 - x[0]) * (1 - 2.0 * x[1]) * t'
 
     kappa = [[1, 0], [0, 1]]
-    kappa_1_dim = 1
+    kappa_inv =  [[1, 0], [0, 1]]
+    min_eig_kappa = 1
     alpha = 1
 
     nu = 0.2            # Poinsson's ratio
@@ -111,10 +112,11 @@ def simple_example_2d_t():
     c_0 = 1e-1
     K = lmbda + 2 / 3 * mu # skeleton bulk modulus
     K_u = K + alpha**2 / c_0
-    c_f = 1 / c_0 * kappa_1_dim * (K + 4 / 3 * mu) / (K_u + 4 / 3 * mu)
+    c_f = 1 / c_0 * min_eig_kappa * (K + 4 / 3 * mu) / (K_u + 4 / 3 * mu)
 
     a = 1.0
     b = 1.0
+    C_FD = 1.0 / DOLFIN_PI / sqrt(1.0 / a ** 2 + 1.0 / b ** 2)
 
     # Givien problem data
     problem_data = dict(u_expr = [u_0_expr, u_1_expr], # Exact solution
@@ -131,7 +133,8 @@ def simple_example_2d_t():
                          l_x = a, # a
                          l_y = b, # b
                          l_z = 0.0,
-                         gdim = 2)
+                         gdim = 2,
+                         C_FD = C_FD)
 
     # Material parameters
     material_params = dict(mu = mu,
@@ -144,7 +147,9 @@ def simple_example_2d_t():
                            phi_0=0.2,  # initial porosity
                            mu_f=1.0,  # fluid viscosity
                            kappa = kappa,       # permiability
-                           c = 0.465)
+                           kappa_inv = kappa_inv,
+                           c = 0.465,
+                           min_eig_kappa=min_eig_kappa)
 
     return problem_data, domain_params, material_params
 

@@ -7,13 +7,38 @@ from ufl.tensoralgebra import Inverse
 from dolfin.cpp.mesh import MeshFunction, cells, RectangleMesh, Point, FacetFunction
 import mshr
 
+
+def fetch_paramenters(material_params, domain_params):
+    E = float(material_params["E"])
+    nu = float(material_params["nu"])
+    alpha = float(material_params["alpha"])
+    M = float(material_params["M"])
+    c_f = float(material_params["c_f"])
+    phi_0 = float(material_params["phi_0"])
+    mu_f = float(material_params["mu_f"])
+    lmbda = float(material_params["lmbda"])
+    mu = float(material_params["mu"])
+    min_eig_kappa = float(material_params["min_eig_kappa"])
+
+    # Convert matrix to UFL form
+    if domain_params["gdim"] == 1:
+        kappa = Expression(material_params["kappa"][0], degree=2)
+        kappa_inv = Expression(material_params["kappa_inv"][0], degree=2)
+    else:
+        kappa = as_matrix(material_params["kappa"])
+        kappa_inv = as_matrix(material_params["kappa_inv"])
+
+    return E, nu, alpha, M, c_f, phi_0, mu_f, kappa, kappa_inv, min_eig_kappa, lmbda, mu
+
+
 # Identity tensor
 def I_tensor(mesh):
     return Identity(mesh.geometry().dim())
 
 # Strain tensor
 def strain_tensor(v, dim):
-    return sym(Grad(v, dim))
+    #return sym(Grad(v, dim))
+    return sym(grad(v))
 
 #Construct 2D geometry
 def geometry_2d(domain_params, test_num, res):
@@ -35,8 +60,9 @@ def geometry_2d(domain_params, test_num, res):
         #mesh = mshr.generate_mesh(mshr.Rectangle(Point(x0, y0), Point(x1, y1)), resolution)
 
         # Get boundary facets
-        boundary_parts = FacetFunction('size_t', mesh)
-        boundary_parts.set_all(0)
+        #boundary_parts = FacetFunction('size_t', mesh) # MeshFunction<T>(mesh, mesh->topology().dim() - 1, 'size_t')
+        boundary_parts = MeshFunction('size_t', mesh, mesh.topology().dim() - 1, 0)
+        #boundary_parts.set_all(0) # or FacetFunction('size_t', mesh, 0)
 
         if test_num == 1:
 
@@ -90,21 +116,21 @@ def construct_stiffness_and_mass_matrices(u, v, A, dim):
 def output_problem_characteristics(test_num, f_expr, A_expr, lambda_expr, uD_expr,
                                    domain, dim, num_cells, num_vertices, space_approx_deg, flux_approx_deg):
 
-    print " "
-    print "%-------------------------"
-    print "% Problem characteristics"
-    print "%-------------------------"
+    print(" ")
+    print("%-------------------------")
+    print("% Problem characteristics")
+    print("%-------------------------")
 
-    print "test: ", test_num
-    print "domain: ", domain
-    print "f = ", f_expr
-    print "lambda = ", lambda_expr
-    print "A = ", A_expr
-    print "uD = ", uD_expr
+    print("test: ", test_num)
+    print("domain: ", domain)
+    print("f = ", f_expr)
+    print("lambda = ", lambda_expr)
+    print("A = ", A_expr)
+    print("uD = ", uD_expr)
 
-    print 'mesh parameters: num_cells = %d, num_vertices = %d' % (num_cells, num_vertices)
-    print "space func approx_deg = ", space_approx_deg
-    print "flux approx_deg = ", flux_approx_deg
+    print('mesh parameters: num_cells = %d, num_vertices = %d' % (num_cells, num_vertices))
+    print("space func approx_deg = ", space_approx_deg)
+    print("flux approx_deg = ", flux_approx_deg)
 
 
 def calculate_CF_of_domain(domain_params):
@@ -115,7 +141,7 @@ def calculate_CF_of_domain(domain_params):
         width = domain_params["l_x"]
         C_FD = 1.0 / DOLFIN_PI / sqrt(1.0 / width**2 + 1.0 / height**2)
 
-    print "Friedrichs' constant C_FD = 1 / pi / (h_1^(-2) + ... + h_n^(-2)) = ", C_FD
+    print("Friedrichs' constant C_FD = 1 / pi / (h_1^(-2) + ... + h_n^(-2)) = ", C_FD)
 
     return C_FD
 
