@@ -7,25 +7,19 @@ import math
 from dolfin.cpp.mesh import CellFunction, cells
 import integrators
 import postprocess
+import problem
 
-def Div(f, dim):
-    # Define differential operators for the 1D case
-    if dim > 1:
-        div_f = div(f)
-    else:
-        div_f = Dx(f, 0)
-    return div_f
 
 def get_matrices_of_optimization_problem(H_div, F_t_tk_, v_k, v_k1, grad_v_k, grad_v_k1, mesh, tau, dim):
     # Define variational problem to optimize the majorant with respect to y_1
     y = TrialFunction(H_div)
     q = TestFunction(H_div)
 
-    S = assemble(Div(y, dim) * Div(q, dim) * dx(domain=mesh))
+    S = assemble(problem.Div(y, dim) * problem.Div(q, dim) * dx(domain=mesh))
     K = assemble(inner(y, q) * dx(domain=mesh))
 
     # if w(x, t) = w(x) * (t - t_k) / tau
-    z = assemble((F_t_tk_ - Constant(0.5) * tau * (v_k1 - v_k)) * Div(q, dim) * dx(domain=mesh))
+    z = assemble((F_t_tk_ - Constant(0.5) * tau * (v_k1 - v_k)) * problem.Div(q, dim) * dx(domain=mesh))
     q = assemble(inner(Constant(0.5) * grad_v_k + grad_v_k1, q) * dx(domain=mesh))
 
     return S, K, z, q
@@ -71,8 +65,8 @@ def majorant_nd_t(k, m_incr_k, m0_k, md_k, mf_k, beta_k,
                   majorant_minimization_time):
     tic()
 
-    rf_k = Div(y_k, dim) - (v_k1 - v_k) / tau
-    rf_k1 = Div(y_k1, dim) - (v_k1 - v_k) / tau
+    rf_k = problem.Div(y_k, dim) - (v_k1 - v_k) / tau
+    rf_k1 = problem.Div(y_k1, dim) - (v_k1 - v_k) / tau
 
     rd_k = y_k - grad_v_k
     rd_k1 = y_k1 - grad_v_k1
@@ -137,8 +131,8 @@ def majorant_nd_t(k, m_incr_k, m0_k, md_k, mf_k, beta_k,
     m0_k[k] = m0
 
 
-    rf_k = Div(y_k, dim) - (v_k1 - v_k) / tau
-    rf_k1 = Div(y_k1, dim) - (v_k1 - v_k) / tau
+    rf_k = problem.Div(y_k, dim) - (v_k1 - v_k) / tau
+    rf_k1 = problem.Div(y_k1, dim) - (v_k1 - v_k) / tau
 
     rd_k = y_k - grad_v_k
     rd_k1 = y_k1 - grad_v_k1
@@ -302,8 +296,8 @@ def majorant_II_nd_t(k, m_incr_k, m0_k, md_k, mf_k, beta_k,
                      majorant_minimization_time):
     tic()
 
-    rf_k = Div(y_k, dim) - (v_k1 - v_k) / tau
-    rf_k1 = Div(y_k1, dim) - (v_k1 - v_k) / tau
+    rf_k = problem.Div(y_k, dim) - (v_k1 - v_k) / tau
+    rf_k1 = problem.Div(y_k1, dim) - (v_k1 - v_k) / tau
 
     rd_k = y_k - grad_v_k
     rd_k1 = y_k1 - grad_v_k1
@@ -392,8 +386,13 @@ def error_norm_nd_t(k, e_incr_k, ed_k, et_k,
 
     v_k1_Ve = interpolate(v_k1, V_exact)
 
-    grad_v_k_Ve = project(grad_v_k, VV_exact)
-    grad_v_k1_Ve = project(grad_v_k1, VV_exact)
+    grad_v_k_Ve = grad_v_k
+    grad_v_k1_Ve = grad_v_k1
+    # grad_v_k_Ve = project(grad_v_k, VV_exact)
+    # grad_v_k1_Ve = project(grad_v_k1, VV_exact)
+    #grad_v_k_Ve = interpolate(grad_v_k, VV_exact)
+    #grad_v_k1_Ve = interpolate(grad_v_k1, VV_exact)
+
 
     e_d, ed_var = grad_error_norm(grad_u_e, sq_grad_u_e, quadr, V_exact, VV_exact, grad_v_k_Ve, grad_v_k1_Ve, tau, mesh)
     #e_d = my_grad_error_norm(grad_u_e, sq_grad_u_e, quadr, V_exact, VV_exact, grad_v_k, grad_v_k1, tau, mesh, dim)
@@ -417,14 +416,26 @@ def error_norm_nd_t(k, e_incr_k, ed_k, et_k,
     return e_incr_k, ed_k, et_k, ed_var
 
 
-def v_norm_nd_t(k, v_norm_incr_k, vd_k, vt_k, v_k1, grad_v_k, grad_v_k1, V_exact, VV_exact, mesh, dim, tau, delta):
+def v_norm_nd_t(k, v_norm_incr_k, vd_k, vt_k, v_k, v_k1, V_exact, VV_exact, mesh, dim, tau, delta):
 
     v_k1_Ve = interpolate(v_k1, V_exact)
+    v_k_Ve = interpolate(v_k, V_exact)
 
-    grad_v_k_Ve = project(grad_v_k, VV_exact)
-    grad_v_k1_Ve = project(grad_v_k1, VV_exact)
+    #grad_v_k_Ve = project(grad_v_k, VV_exact)
+    #grad_v_k1_Ve = project(grad_v_k1, VV_exact)
+    #grad_v_k_Ve = interpolate(grad_v_k, VV_exact)
+    #grad_v_k1_Ve = interpolate(grad_v_k1, VV_exact)
+    #grad_v_k_Ve = grad_v_k
+    #grad_v_k1_Ve = grad_v_k1
 
-    vd_k[k] = assemble(tau / Constant(3.0) * (inner(grad_v_k_Ve, grad_v_k1_Ve) + inner(grad_v_k1_Ve, grad_v_k_Ve) + inner(grad_v_k1_Ve, grad_v_k1_Ve)) * dx(domain=mesh))
+
+    vd_k[k] = assemble(tau / Constant(3.0) * (inner(problem.Grad(v_k_Ve, dim), problem.Grad(v_k_Ve, dim))
+                                              + inner(problem.Grad(v_k_Ve, dim), problem.Grad(v_k1_Ve, dim))
+                                              + inner(problem.Grad(v_k1_Ve, dim), problem.Grad(v_k1_Ve, dim)))* dx(domain=mesh))
+
+    #vd_k[k] = assemble(tau / Constant(3.0) * (inner(grad_v_k_Ve, grad_v_k1_Ve)
+    #                                          + inner(grad_v_k1_Ve, grad_v_k_Ve)
+    #                                          + inner(grad_v_k1_Ve, grad_v_k1_Ve)) * dx(domain=mesh))
     vt_k[k] = assemble((inner(v_k1_Ve, v_k1_Ve)) * dx(domain=mesh))
 
     # Calculate the error increment

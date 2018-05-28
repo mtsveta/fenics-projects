@@ -188,13 +188,13 @@ def majorant_nd(v, y, H_div, f, A, invA, min_eig_A, eps, a, lmbd,
             #yRhs = sum((C_FD ** 2) / min_eig_A * z, beta * g)
             #solve(yMatrix, Y, yRhs)
 
-            #solve((C_FD ** 2) / min_eig_A * S + beta * K, Y, (C_FD ** 2) / min_eig_A * z + beta * g,
-            #      "gmres", "amg")
-            if len(Y) <= 1e4:
-                solve((C_FD ** 2) / min_eig_A * S + beta * K, Y, (C_FD ** 2) / min_eig_A * z + beta * g)
-            else:
-                solver.solve((C_FD ** 2) / min_eig_A * S + beta * K, Y, (C_FD ** 2) / min_eig_A * z + beta * g,
-                  "gmres", "ilu")
+            solve((C_FD ** 2) / min_eig_A * S + beta * K, Y, (C_FD ** 2) / min_eig_A * z + beta * g)
+            
+            #if len(Y) <= 1e4:
+            #    solve((C_FD ** 2) / min_eig_A * S + beta * K, Y, (C_FD ** 2) / min_eig_A * z + beta * g)
+            #else:
+            #    solver.solve((C_FD ** 2) / min_eig_A * S + beta * K, Y, (C_FD ** 2) / min_eig_A * z + beta * g,
+            #      "gmres", "ilu")
 
             y.vector = Y
 
