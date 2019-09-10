@@ -1,13 +1,12 @@
-from dolfin.cpp.function import near
-
 __author__ = 'svetlana'
 
+from fenics import *
 from dolfin import *
-from ufl.tensoralgebra import Inverse
-from dolfin.cpp.mesh import MeshFunction, cells, RectangleMesh, Point, FacetFunction
+#from dolfin.cpp.math import near
+#from dolfin.cpp.mesh import MeshFunction, cells, RectangleMesh, Point, FacetFunction
 import mshr
-
-
+import numpy
+'''
 def fetch_paramenters(material_params, domain_params):
     E = float(material_params["E"])
     nu = float(material_params["nu"])
@@ -19,6 +18,7 @@ def fetch_paramenters(material_params, domain_params):
     lmbda = float(material_params["lmbda"])
     mu = float(material_params["mu"])
     min_eig_kappa = float(material_params["min_eig_kappa"])
+    beta = float(material_params["beta"])
 
     # Convert matrix to UFL form
     if domain_params["gdim"] == 1:
@@ -28,17 +28,27 @@ def fetch_paramenters(material_params, domain_params):
         kappa = as_matrix(material_params["kappa"])
         kappa_inv = as_matrix(material_params["kappa_inv"])
 
-    return E, nu, alpha, M, c_f, phi_0, mu_f, kappa, kappa_inv, min_eig_kappa, lmbda, mu
-
-
-# Identity tensor
-def I_tensor(mesh):
-    return Identity(mesh.geometry().dim())
+    return E, nu, alpha, beta, M, c_f, phi_0, mu_f, kappa, kappa_inv, min_eig_kappa, lmbda, mu
+'''
 
 # Strain tensor
-def strain_tensor(v, dim):
-    #return sym(Grad(v, dim))
-    return sym(grad(v))
+def epsilon(v):
+    return 0.5 * (nabla_grad(v) + nabla_grad(v).T)
+    #return sym(grad(v))
+# With lambda
+#epsilon = lambda v: 0.5*(grad(v) + grad(v).T)
+
+# Stress tensor (via Lame parameters)
+def sigma(v, mu, lmbda):
+    #return 2.0 * mu * epsilon(v) + lmbda * tr(epsilon(v)) * Identity(dim))
+    #return 2 * mu * epsilon(v) + lmbda * nabla_div(v) * Identity(dim)
+    dim = v.geometric_dimension()
+    return 2 * mu * epsilon(v) + lmbda * nabla_div(v) * Identity(dim)
+
+# Inverse stress tensor (via Lame parameters)
+def inv_sigma(y, mu, lmbda):
+    dim = y.geometric_dimension()
+    return 1 / (2 * mu) * (y - lmbda / (3 * lmbda + 2 * mu) * tr(y) * Identity(dim))
 
 #Construct 2D geometry
 def geometry_2d(domain_params, test_num, res):
@@ -53,7 +63,7 @@ def geometry_2d(domain_params, test_num, res):
 
         # irregular mesh
         mesh_type = 'crossed'
-        mesh = RectangleMesh(Point(x0, y0), Point(x1, y1), 20, 5, mesh_type)
+        mesh = RectangleMesh(Point(x0, y0), Point(x1, y1), res, res, mesh_type)
 
         # regular mesh
         #resolution = res
@@ -62,6 +72,7 @@ def geometry_2d(domain_params, test_num, res):
         # Get boundary facets
         #boundary_parts = FacetFunction('size_t', mesh) # MeshFunction<T>(mesh, mesh->topology().dim() - 1, 'size_t')
         boundary_parts = MeshFunction('size_t', mesh, mesh.topology().dim() - 1, 0)
+        h = mesh.hmin()
         #boundary_parts.set_all(0) # or FacetFunction('size_t', mesh, 0)
 
         if test_num == 1:
@@ -102,7 +113,7 @@ def geometry_2d(domain_params, test_num, res):
         mesh = mshr.generate_mesh(geometry, resolution)
 
     # we can send the facet-funtion, which contain the mesh
-    return boundary_parts
+    return mesh, boundary_parts, h
 
 def construct_stiffness_and_mass_matrices(u, v, A, dim):
     # Components of stiffness (K) & mass (M) matrices
@@ -171,13 +182,28 @@ def Div(f, dim):
         div_f = Dx(f, 0)
     return div_f
 
+
+# Generalized inverse operator
+def inverse(A_expr):
+    """
+    :param A: 1d-scalar or nd-matrix to inverse
+    :param dim: dimension of the problem
+    :return: inverted A depending on dim
+    """
+
+    A_mtx = numpy.matrix(A_expr)
+    inv_A_mtx = inv(A_mtx)
+    invA = as_matrix(inv_A_mtx.tolist())
+
+    return invA
+"""
 def inverse(A, dim):
     if dim == 1:
         invA = 1 / A
     else:
         invA = Inverse(A)
     return invA
-
+"""
 def get_next_step_solution(v_k, v_k1, K, tau, M, f_k, f_k1, bc, time_discretization_tag):
 
     if time_discretization_tag == 'implicit':

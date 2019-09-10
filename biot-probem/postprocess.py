@@ -1,7 +1,6 @@
 __author__ = 'svetlana'
 
 from dolfin import *
-from dolfin.cpp.mesh import CellFunctionSizet, CellFunctionDouble, CellFunctionInt, Mesh, MeshEditor
 
 import scipy.io
 import os, sys
@@ -14,10 +13,6 @@ import matplotlib.tri as tri
 import matplotlib
 import plotting
 
-#parameters["plotting_backend"] = "matplotlib"
-
-import dolfin.cpp.mesh
-
 # -------------------------------------------------------------------------------------------------------------------- #
 # IO functions
 # -------------------------------------------------------------------------------------------------------------------- #
@@ -29,13 +24,25 @@ def get_project_path():
 
 # Constructing the name of the result folder based on the problem parameters
 def construct_result_folder_name(dim, test_num, problem_params):
-    results_folder_name = '/out/%dd/test-%d/test-%d-v-P%d-p-P%d-flux-RT%d-nt-%d-meshres-%d/' \
-                          % (dim, test_num, test_num,
-                             problem_params["u_approx_order"],
-                             problem_params["p_approx_order"],
-                             problem_params["flux_approx_order"],
-                             problem_params["time_steps"],
-                             problem_params["mesh_resolution"])
+    if problem_params["coupling_approach"] == 'iterative':
+        results_folder_name = '/out/%dd/test-%d/iterative/test-%d-v-P%d-p-P%d-flux-RT%d-tau-P%d-nt-%d-nit-%d-meshes-%d/' \
+                              % (dim, test_num, test_num,
+                                 problem_params["u_approx_order"],
+                                 problem_params["p_approx_order"],
+                                 problem_params["flux_approx_order"],
+                                 problem_params["stress_approx_order"],
+                                 problem_params["time_steps"],
+                                 problem_params["iter_num"],
+                                 problem_params["mesh_resolution"])
+    else:
+        results_folder_name = '/out/%dd/test-%d/full-implicit/test-%d-v-P%d-p-P%d-flux-RT%d-tau-P%d-nt-%d-meshes-%d/' \
+                              % (dim, test_num, test_num,
+                                 problem_params["u_approx_order"],
+                                 problem_params["p_approx_order"],
+                                 problem_params["flux_approx_order"],
+                                 problem_params["stress_approx_order"],
+                                 problem_params["time_steps"],
+                                 problem_params["mesh_resolution"])
     '''
     if problem_params["solving_strategy_tag"] == "without-refinement":
         results_folder_name += 'no-ref/'
@@ -48,15 +55,16 @@ def construct_result_folder_name(dim, test_num, problem_params):
     return results_folder_name
 
 # Function creating the result folder
-def create_results_folder(directory):
+def create_results_folder(test_params, directory):
     # Creat the full directory of the result folder
     full_directory = get_project_path() + directory
 
     # If derictory doesn't exist
     if not os.path.exists(full_directory):
         os.makedirs(full_directory)
-    # Write into the loggin path
-    #sys.stdout = open(full_directory + "log.dat", "w+")
+    # Write into the logging path
+    if (test_params["output"]=="file"):
+        sys.stdout = open(full_directory + "log-results.txt", "w+")
 
 # Saving data into the mat-file
 def save_to_mat_file(data, data_tag, result_path):
@@ -76,12 +84,11 @@ def output_problem_characteristics(test_num, mesh, problem_data, domain_params, 
     print("p_expr: ", problem_data['p_expr'])
     print("t_T: ", problem_data['t_T'])
 
-    print("M: ", material_params['M'])
     print("alpha: ", material_params['alpha'])
-    print("mu_f: ", material_params['mu_f'])
-    print("nu: ", material_params['nu'])
+    print("beta: ", material_params['beta'])
+
+    print("lmbda: ", material_params['lmbda'])
     print("mu: ", material_params['mu'])
-    print("E: ", material_params['E'])
     print("kappa: ", material_params['kappa'])
 
     print('mesh parameters: time steps = %d, num_cells = %d, num_vertices = %d'
@@ -92,39 +99,52 @@ def output_problem_characteristics(test_num, mesh, problem_data, domain_params, 
     print("p_approx_order = ", test_params["p_approx_order"])
     print("DOFs of u = ", len(func_spaces["V"].dofmap().dofs()))
     print("DOFs of p = ", len(func_spaces["Q"].dofmap().dofs()))
+    print("DOFs of tau = ", len(func_spaces["H_Div"].dofmap().dofs()))
+    print("DOFs of y = ", len(func_spaces["H_div"].dofmap().dofs()))
 
     print("iter_num = ", test_params["iter_num"])
 
-def print_biot_iterative_coupling_parameters(beta, L, q):
+def print_biot_iterative_coupling_parameters(beta, L, L_opt, q, q_opt):
     print('beta = ', float(beta))
     print('L = ', float(L))
+    print('L_opt = ', float(L_opt))
     print('q = ', float(q))
+    print('q_opt = ', float(q_opt))
 
 # Outputting to the consol the results of the interation procedure
 def output_errors_wrt_iterations(ep_array, epl2_array, eu_array, eudiv_array, ITER_NUM):
 
     print("")
-    print("iter # | ||| e_p |||^2   | || e_p ||^2_{L2}  | ||| e_u |||^2   | || div e_u ||^2  ")
+    print("iter # & ||| e_p |||^2   & || e_p ||^2_{L2}  & ||| e_u |||^2   & || div e_u ||^2  ")
     print("----------------------------------------------------------------------------------")
 
     for i in range(1, ITER_NUM):
-        print("    %2d | %10.4e | %10.4e | %10.4e  | %10.4e " % (i, ep_array[i], epl2_array[i], eu_array[i], eudiv_array[i]))
+        print("    %2d & %10.4e & %10.4e & %10.4e  & %10.4e " % (i, ep_array[i], epl2_array[i], eu_array[i], eudiv_array[i]))
     print("")
 
 # Outputting to the consol the results of the interation procedure
 def output_errors_and_estimates_wrt_iterations(ep_array, epl2_array, eu_array, eudiv_array,
-                                               maj_ep_array, maj_epl2_array, maj_eu_array, maj_eudiv_array, ITER_NUM):
+                                               maj_ep_array, maj_epl2_array, maj_eu_array, maj_eudiv_array,
+                                               maj_pi_it, maj_ui_it,
+                                               ITER_NUM):
 
     print("")
-    print("iter # | ||| e_p |||^2   M^2_p     | || e_p ||^2_{L2}    M^2_{L2}  | ||| e_u |||^2   M^2_{u}    | || div e_u ||^2    M^2_{divu}")
+    print("iter # & ||| e_p |||^2   M^2_p     & || e_p ||^2_{L2}    M^2_{L2}  & ||| e_u |||^2   M^2_{u}    & || div e_u ||^2    M^2_{divu}")
     print("--------------------------------------------------------------------------------------------------------------------------------------")
-
-    for i in range(1, ITER_NUM):
-        print("    %2d | %10.4e     %10.4e | %14.4e     %10.4e | %10.4e     %10.4e  | %14.4e     %10.4e "
-              % (i, ep_array[i], maj_ep_array[i],
+    #for i in range(ITER_NUM-2, ITER_NUM):
+    for i in range(0, ITER_NUM):
+        print("    %2d & %10.4e     %10.4e & %14.4e     %10.4e & %10.4e     %10.4e  & %14.4e     %10.4e "
+              % (i+1, ep_array[i], maj_ep_array[i],
                  epl2_array[i], maj_epl2_array[i],
                  eu_array[i], maj_eu_array[i],
                  eudiv_array[i], maj_eudiv_array[i]))
+    print("")
+    print("final iter & ||| e_p |||^2   \tM^2_ph \t\tM^2_pi & ||| e_u |||^2    \tM^2_uh  \tM^2_ui ")
+    print("--------------------------------------------------------------------------------------")
+    for i in range(ITER_NUM-1, ITER_NUM):
+        print("        %2d & %10.4e   %12.4e  %10.4e & %13.4e %12.4e %12.4e "
+              % (i+1, ep_array[i], maj_ep_array[i], maj_pi_it[i],
+                 eu_array[i], maj_eu_array[i],  maj_ui_it[i]))
     print("")
 
 # -------------------------------------------------------------------------------------------------------------------- #
@@ -152,7 +172,7 @@ def plot_function(f, mesh, dim, result_path):
     if dim == 1:
         plot_function_1d(mesh, f, result_path)
     elif dim == 2:
-        plot_function_2d(mesh, f, result_path)
+        #plot_function_2d(mesh, f, result_path)
         plot_function_3d(mesh, f, result_path)
 
 def plot_function_1d(mesh, f, result_path):

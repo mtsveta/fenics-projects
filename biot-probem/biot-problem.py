@@ -3,17 +3,15 @@ __date__ = "2016-04-20"
 __copyright__ = "Copyright (C) 2016 Svetlana Matculevich"
 __license__ = ""
 
-#import fenics
 from dolfin import *
-from dolfin.cpp.mesh import *
-import time
 from numpy import *
+import time
 
 # Customer libraries
 import tests, problem, postprocess
-from problem import epsilon, sigma, inv_sigma
-from dolfin.cpp.la import list_linear_solver_methods, list_krylov_solver_preconditioners
-from matplotlib import interactive
+#from problem import epsilon, sigma, inv_sigma
+#from dolfin.cpp.la import list_linear_solver_methods, list_krylov_solver_preconditioners
+#from matplotlib import interactive
 
 # https://fenicsproject.org/olddocs/dolfin/1.3.0/python/programmers-reference/fem/solving/solve.html
 # https://fenicsproject.org/pub/tutorial/sphinx1/._ftut1006.html#ftut-app-solver-prec
@@ -28,6 +26,7 @@ parameters['form_compiler']['cpp_optimize'] = True
 # list_linear_solver_methods()
 # list_krylov_solver_preconditioners()
 
+# Class to generate the errors and their estimates
 class ErrorControl():
 
     # Init variable of ErrorControl class
@@ -601,6 +600,7 @@ class ErrorControl():
         return maj_d, maj_eq, var_m_d
 
 
+# Class to solve the Biot problem
 class BiotSolvers():
 
     # Init the BiotSolver with the mesh
@@ -725,14 +725,41 @@ class BiotSolvers():
                 = error_control.error_displacement(eu_enrg_it, eu_div_it, i, u_i1, funcs, mu, lmbda)
 
             gamma = math.sqrt(2 * L)
-            eta_i1 = alpha / gamma * div(u_i1) - L / gamma * p_i1
-            eta_i = alpha / gamma * div(u_i) - L / gamma * p_i
+            eta_i1 = project(alpha / gamma * div(u_i1) - L / gamma * p_i1, func_spaces["Q"])
+            eta_i = project(alpha / gamma * div(u_i) - L / gamma * p_i, func_spaces["Q"])
+
+            '''
+            v = Function(V)
+            v.vector()[:] = u.vector()[:]
+            v.vector() += w.vector()
+            '''
 
             aux_it = test_params["iter_num"]-4
+
             if i == aux_it:
-                eta_0 = eta_i
-                p_0 = p_i
-                u_0 = u_i
+                # TODO: Make a hard copy of eta_i
+                '''
+                v = Function(V)
+                assigner = FunctionAssigner(V, U.sub(0))
+                assigner.assign(v, u.sub(0))
+                '''
+                #eta_0 = Function(func_spaces["Q"])
+                eta_0 = Function(func_spaces["Q"])
+                p_0 = Function(func_spaces["Q"])
+                u_0 = Function(func_spaces["V"])
+
+                assign(eta_0, eta_i)
+                assign(p_0, p_i)
+                assign(u_0, u_i)
+
+                eta_0_ = eta_i.copy(deepcopy=True)
+
+                #eta_0 = eta_i
+                #p_0 = p_i
+                #u_0 = u_i
+            if i >= aux_it:
+                print(eta_0)
+                print(eta_0_)
 
             if self.test_params["error_estimates"] == True and ((i >= test_params["iter_num"] - 1 and i <= test_params["iter_num"]) or i == aux_it):
 
@@ -779,6 +806,7 @@ class BiotSolvers():
                     incr_divu_norm = assemble(div(u_i1 - u_i) ** 2 * dx)
 
                     print("\| eta_i1 - eta_i \|  = %.4e" % (incr_sigma_norm))
+                    print("\| eta_i1 - eta_0 \|  = %.4e" % (incr_sigma_norm_0))
                     print("\| p_i1 - p_i \|      = %.4e" % (incr_p_norm))
                     print("\| div(u_i1 - u_i) \| = %.4e\n" % (incr_divu_norm))
 
@@ -1247,7 +1275,7 @@ class TestBiot():
         # Check if exist and create folder for the results
         resultfolder_name = postprocess.construct_result_folder_name(self.domain_params['gdim'],
                                                                      self.test_params['test_num'], test_params)
-        postprocess.create_results_folder(resultfolder_name, test_params)
+        postprocess.create_results_folder(test_params, resultfolder_name)
 
         # Generate mesh and boundary parts
         if self.domain_params['gdim'] == 2:
@@ -1276,7 +1304,7 @@ class TestBiot():
                                                    test_params, func_spaces)
 
         # Set start time
-        t0_problem = time.time()
+        t0_problem = time.clock()
         # Solve Biot system
         error_p, errpr_pl2, error_u, error_udiv, e_p, e_u, e_enrg, maj_p, maj_u, maj \
             = self.solve_biot(func_spaces, funcs, facet_function, mesh,
@@ -1288,7 +1316,7 @@ class TestBiot():
         maj[test_params["time_steps"] - 1]
         '''
         # Set the final time
-        tfinal_problem = time.time()
+        tfinal_problem = time.clock()
         print('total values:')
         print('\t\th\t||| e_p |||^2\t\t\tMp^2\t||| e_u |||^2\t\t\tMu^2\t[(e_u, e_p)]^2\t M^2\t i_eff')
         print('%4.4e &\t %12.4e &\t %12.4e &\t %12.4e &\t %12.4e &\t %12.4e &\t%12.4e &\t%5.2f\n'
@@ -1566,6 +1594,10 @@ if __name__ == '__main__':
     CG_method = 'CG-method'
     mixed_method = 'mixed-method'
 
+    # Pressure recovery method
+    console_output = 'console'
+    file_output = 'file'
+
     # list of tests
     tests = {1: tests.mandels_problem_2d_t,
              2: tests.simple_example_2d_t,
@@ -1576,7 +1608,7 @@ if __name__ == '__main__':
     # Set the number of the test and call for the problem data
     test_num = 4
 
-    resolutions = [4]
+    resolutions = [64]
     #resolutions = [32]
     #resolutions = [4, 8, 16, 32, 64]
 
@@ -1587,7 +1619,7 @@ if __name__ == '__main__':
                            flux_approx_order=2,
                            stress_approx_order=2,
                            iter_accuracy=1e-4,  # Required accuracy at each interation cycle
-                           time_steps=10,  # Number of time steps on the interval [0, t_T]
+                           time_steps=1000,  # Number of time steps on the interval [0, t_T]
                            mesh_resolution=resolutions[i],  # Lever of refinement of initial mesh [4, 8, 16, 32, 64, 128]
                            iter_num=7,
                            coupling_approach=iterative_coupling,
@@ -1597,7 +1629,8 @@ if __name__ == '__main__':
                            error_estimates=True,
                            majorant_optimisation=True,
                            majorant_optimization_iterations_number=3,
-                           test_num=test_num)
+                           test_num=test_num,
+                           output=console_output)
 
         problem_data, domain_params, material_params = tests[test_num]()
 
