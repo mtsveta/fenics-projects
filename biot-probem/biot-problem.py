@@ -743,7 +743,7 @@ class BiotSolvers():
                 assigner = FunctionAssigner(V, U.sub(0))
                 assigner.assign(v, u.sub(0))
                 '''
-                #eta_0 = Function(func_spaces["Q"])
+
                 eta_0 = Function(func_spaces["Q"])
                 p_0 = Function(func_spaces["Q"])
                 u_0 = Function(func_spaces["V"])
@@ -753,13 +753,13 @@ class BiotSolvers():
                 assign(u_0, u_i)
 
                 eta_0_ = eta_i.copy(deepcopy=True)
+                p_0_ = p_i.copy(deepcopy=True)
+                u_0_ = u_i.copy(deepcopy=True)
 
-                #eta_0 = eta_i
-                #p_0 = p_i
-                #u_0 = u_i
             if i >= aux_it:
-                print(eta_0)
-                print(eta_0_)
+                print("eta_0 = ", eta_0)
+                print("eta_0_ = ", eta_0_)
+                print("eta_i = ", eta_i)
 
             if self.test_params["error_estimates"] == True and ((i >= test_params["iter_num"] - 1 and i <= test_params["iter_num"]) or i == aux_it):
 
