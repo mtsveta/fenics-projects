@@ -5,13 +5,19 @@ __license__ = ""
 
 from dolfin import *
 from numpy import *
-import time
+from time import process_time
 
 # Customer libraries
 import tests, problem, postprocess
 #from problem import epsilon, sigma, inv_sigma
 #from dolfin.cpp.la import list_linear_solver_methods, list_krylov_solver_preconditioners
 #from matplotlib import interactive
+
+# https://fenicsproject.org/olddocs/dolfin/1.3.0/python/programmers-reference/fem/solving/solve.html
+# https://fenicsproject.org/pub/tutorial/sphinx1/._ftut1006.html#ftut-app-solver-prec
+# solve(A1, u1.vector(), b1, ’bicgstab’, ’hypre_amg’)
+# solve(A2, p1.vector(), b2, ’bicgstab’, ’hypre_amg’)
+# solve(A3, u1.vector(), b3, ’cg’, ’sor’)
 
 parameters['form_compiler']['optimize'] = True
 parameters['form_compiler']['cpp_optimize'] = True
@@ -395,9 +401,10 @@ class ErrorControl():
             self.calculate_majorant_bar_mu_opt(p, y, beta, C_FD,
                                                f_bar, funcs["kappa"], funcs["min_eig_kappa"],
                                                react)
-        #'''
+
         print('%------------------------------------------------------------------------------------%')
         print("% Majorant for e_p")
+        print('%------------------------------------------------------------------------------------%')
 
         self.output_optimization_results(0, maj, m_d, m_f, ep_array[k - 1], beta)
 
@@ -722,38 +729,12 @@ class BiotSolvers():
             eta_i1 = project(alpha / gamma * div(u_i1) - L / gamma * p_i1, func_spaces["Q"])
             eta_i = project(alpha / gamma * div(u_i) - L / gamma * p_i, func_spaces["Q"])
 
-            '''
-            v = Function(V)
-            v.vector()[:] = u.vector()[:]
-            v.vector() += w.vector()
-            '''
-
-            aux_it = test_params["iter_num"]-4
+            pow = 6
+            aux_it = test_params["iter_num"] - pow
 
             if i == aux_it:
-                # TODO: Make a hard copy of eta_i
-                '''
-                v = Function(V)
-                assigner = FunctionAssigner(V, U.sub(0))
-                assigner.assign(v, u.sub(0))
-                '''
-
-                eta_0 = Function(func_spaces["Q"])
-                p_0 = Function(func_spaces["Q"])
-                u_0 = Function(func_spaces["V"])
-
-                assign(eta_0, eta_i)
-                assign(p_0, p_i)
-                assign(u_0, u_i)
-
-                eta_0_ = eta_i.copy(deepcopy=True)
-                p_0_ = p_i.copy(deepcopy=True)
-                u_0_ = u_i.copy(deepcopy=True)
-
-            if i >= aux_it:
-                print("eta_0 = ", eta_0)
-                print("eta_0_ = ", eta_0_)
-                print("eta_i = ", eta_i)
+                # Make a deep copy of eta_i
+                eta_aux = eta_i.copy(deepcopy=True)
 
             if self.test_params["error_estimates"] == True and ((i >= test_params["iter_num"] - 1 and i <= test_params["iter_num"]) or i == aux_it):
 
@@ -793,22 +774,24 @@ class BiotSolvers():
                     print("M^{h,2}_div(u)   = %.4e\n" % maj_uhdiv_it[i-1])
 
                 if i == test_params["iter_num"]:
+
                     incr_sigma_norm = assemble((eta_i1 - eta_i) ** 2 * dx)
-                    incr_sigma_norm_0 = assemble((eta_i1 - eta_0) ** 2 * dx)
-                    incr_p_norm = assemble((p_i1 - p_i) ** 2 * dx)
-                    #incr_divu_norm = assemble(tr(epsilon(u_i1 - u_i)) ** 2 * dx)
-                    incr_divu_norm = assemble(div(u_i1 - u_i) ** 2 * dx)
+                    incr_sigma_norm_aux = assemble((eta_i1 - eta_aux) ** 2 * dx)
 
-                    print("\| eta_i1 - eta_i \|  = %.4e" % (incr_sigma_norm))
-                    print("\| eta_i1 - eta_0 \|  = %.4e" % (incr_sigma_norm_0))
-                    print("\| p_i1 - p_i \|      = %.4e" % (incr_p_norm))
-                    print("\| div(u_i1 - u_i) \| = %.4e\n" % (incr_divu_norm))
+                    #incr_p_norm = assemble((p_i1 - p_i) ** 2 * dx)
+                    #incr_divu_norm = assemble(div(u_i1 - u_i) ** 2 * dx)
 
-                    print("Coefficients in the iterative majorants:")
+                    #print("\| p_i1 - p_i \|      = %.4e" % (incr_p_norm))
+                    #print("\| div(u_i1 - u_i) \| = %.4e\n" % (incr_divu_norm))
+
+                    print("Components of the iterative majorants:")
+                    print("--------------------------------------")
+
                     maj_base = incr_sigma_norm \
                                + lmbda / 2 * (maj_uhdiv_it[i-1] + maj_uhdiv_it[i - 2]) \
                                + L / 4 * (maj_phl2_it[i-1] + maj_phl2_it[i - 2])
 
+                    print("\| eta_i1 - eta_i \|  = %.4e" % (incr_sigma_norm))
                     print("3 * q / (1 - q)**2 * (C_FD ** 2 * beta / min_eig_kappa + 1) = %.4e, " %
                           (3 * q / (1 - q) ** 2 * (C_FD ** 2 * funcs["beta"] / funcs["min_eig_kappa"] + 1)))
                     print("where")
@@ -843,44 +826,37 @@ class BiotSolvers():
         #incr_p_norm_0 = assemble((p_i1 - p_0) ** 2 * dx)
         #incr_divu_norm_0 = assemble(div(u_i1 - u_0) ** 2 * dx)
 
-        maj_base_0 = incr_sigma_norm_0 \
+        print("Components of the improved iterative majorants:")
+        print("-----------------------------------------------")
+
+        maj_base_aux = incr_sigma_norm_aux \
                          + lmbda / 2 * (maj_uhdiv_it[last_it] + maj_uhdiv_it[aux_it]) \
                          + L / 4 * (maj_phl2_it[last_it] + maj_phl2_it[aux_it])
-        q_0 = q**(test_params["iter_num"] - aux_it)
-        print("\| eta_i1 - eta_0 \|  = %.4e" % (incr_sigma_norm_0))
-        print("maj_uhdiv_it[last_it] + maj_uhdiv_it[0]  = %.4e" % (maj_uhdiv_it[last_it] + maj_uhdiv_it[aux_it]))
-        print("maj_phl2_it[last_it] + maj_phl2_it[0]  = %.4e" % (maj_phl2_it[last_it] + maj_phl2_it[aux_it]))
+        q_aux = q**(test_params["iter_num"] - aux_it)
+
+        print("\| eta_i1 - eta_aux \|  = %.4e" % (incr_sigma_norm_aux))
+        print("maj_uhdiv_it[last_it] + maj_uhdiv_it[aux_it]  = %.4e" % (maj_uhdiv_it[last_it] + maj_uhdiv_it[aux_it]))
+        print("maj_phl2_it[last_it] + maj_phl2_it[aux_it]  = %.4e" % (maj_phl2_it[last_it] + maj_phl2_it[aux_it]))
 
         print("pow = ", (test_params["iter_num"] - aux_it))
         print("q = ", q)
-        print("q^pow = q^(total-aux) = ", q ** (test_params["iter_num"] - aux_it))
-        print("3 * q_0 / (1 - q_0)**2 * (C_FD ** 2 * beta / min_eig_kappa + 1) = %.4e, " %
-              (3 * q_0 / (1 - q_0) ** 2 * (C_FD ** 2 * funcs["beta"] / funcs["min_eig_kappa"] + 1)))
+        print("q_aux = q^pow = q^(total-aux) = ", q ** (test_params["iter_num"] - aux_it))
+        print("3 * q_aux / (1 - q_aux)**2 * (C_FD ** 2 * beta / min_eig_kappa + 1) = %.4e, " %
+              (3 * q_aux / (1 - q_aux) ** 2 * (C_FD ** 2 * funcs["beta"] / funcs["min_eig_kappa"] + 1)))
         print("where")
         print("(C_FD ** 2 * beta / min_eig_kappa + 1) = %.4e" % ((C_FD ** 2 * funcs["beta"] / funcs["min_eig_kappa"] + 1)))
-        print("3 * q_0 / (1 - q_0)**2 = %.4e" % (3 * q_0 / (1 - q_0) ** 2))
-        print("3 * q_0**2 / (1 - q_0)**2 * (1 + gdim * lmbda / (2 * mu)) = %.4e" %(3 * q_0 ** 2 / (1 - q_0) ** 2 * (1 + gdim * lmbda / (2 * mu))))
-        print("maj(i, 0) = %.4e\n " % maj_base_0)
+        print("3 * q_0 / (1 - q_0)**2 = %.4e" % (3 * q_aux / (1 - q_aux) ** 2))
+        print("3 * q_0**2 / (1 - q_0)**2 * (1 + gdim * lmbda / (2 * mu)) = %.4e" %(3 * q_aux ** 2 / (1 - q_aux) ** 2 * (1 + gdim * lmbda / (2 * mu))))
+        print("maj(i, q_aux) = %.4e\n " % maj_base_aux)
 
-        maj_pi_it_0 = maj_base_0 * 3 * q_0 / (1 - q_0) ** 2 * (C_FD ** 2 * funcs["beta"] / funcs["min_eig_kappa"] + 1)
-        maj_ui_it_0 = maj_base_0 * 3 * q_0 ** 2 / (1 - q_0) ** 2 * (1 + gdim * lmbda / (2 * mu))
+        maj_pi_it_aux = maj_base_aux * 3 * q_aux / (1 - q_aux) ** 2 * (C_FD ** 2 * funcs["beta"] / funcs["min_eig_kappa"] + 1)
+        maj_ui_it_aux = maj_base_aux * 3 * q_aux ** 2 / (1 - q_aux) ** 2 * (1 + gdim * lmbda / (2 * mu))
 
         if test_params["full_documentation"]:
-            print("based on 0: M^{2,i}(p) = %.4e" % maj_pi_it_0)
-            print("based on 0: M^{2,i}(u) = %.4e" % maj_ui_it_0)
+            print("based on q_aux: M^{2,i}(p) = %.4e" % maj_pi_it_aux)
+            print("based on q_aux: M^{2,i}(u) = %.4e\n" % maj_ui_it_aux)
 
-        '''
-        for j in range(0, last_it):
-            print("j = ", j)
-            print("q^", last_it - j)
-            
-            maj_base_it[j] = incr_sigma_norm \
-                             + lmbda / 2 * (maj_uhdiv_it[last_it] + maj_uhdiv_it[j]) \
-                             + L / 4 * (maj_phl2_it[last_it] + maj_phl2_it[j])
-            q_it = q^(last_it - j)
-            maj_pi_it_mult[i - 1] = maj_base * 3 * q / (1 - q) ** 2 * (C_FD ** 2 * funcs["beta"] / funcs["min_eig_kappa"] + 1)
-            maj_ui_it_mult[i - 1] = maj_base * 3 * q ** 2 / (1 - q) ** 2 * (1 + gdim * lmbda / (2 * mu))
-        '''
+        # Get the value from the last iteration for all the discretisation norms
         ep_enrg, ep_l2, eu_enrg, eu_div, maj_ph, maj_phl2, maj_uh, maj_uhdiv, maj_pi, maj_ui = \
             self.get_last_iter(n, last_it,
                                ep_enrg, ep_l2, eu_enrg, eu_div, maj_ph, maj_phl2, maj_uh, maj_uhdiv, maj_pi, maj_ui,
@@ -908,31 +884,34 @@ class BiotSolvers():
             print("improved increment on the %dth interval " % (n + 1))
             print("-------------------------------------------------------------------")
             print("||| e_p |||^2  = %.4e, Mp^2  = %.4e, i_eff(Mp)  = %.2f" % (
-                ep_enrg_it[last_it], 2 * (maj_pi_it_0 + maj_ph_it[last_it]),
-                sqrt((2 * (maj_pi_it_0 + maj_ph_it[last_it])) / ep_enrg_it[last_it])))
+                ep_enrg_it[last_it], 2 * (maj_pi_it_aux + maj_ph_it[last_it]),
+                sqrt((2 * (maj_pi_it_aux + maj_ph_it[last_it])) / ep_enrg_it[last_it])))
             print("||| e_u |||^2  = %.4e, Mu^2  = %.4e, i_eff(Mu)  = %.2f" % (
-                eu_enrg_it[last_it], 2 * (maj_ui_it_0 + maj_uh_it[last_it]),
-                sqrt((2 * (maj_ui_it_0 + maj_uh_it[last_it])) / eu_enrg_it[last_it])))
+                eu_enrg_it[last_it], 2 * (maj_ui_it_aux + maj_uh_it[last_it]),
+                sqrt((2 * (maj_ui_it_aux + maj_uh_it[last_it])) / eu_enrg_it[last_it])))
             print("-------------------------------------------------------------------")
             print("[(e_u, e_p)]^2 = %.4e, Mit^2 = %.4e, i_eff(Mit) = %.2f"
                       % (ep_enrg_it[last_it] + eu_enrg_it[last_it],
                          2 * (maj_pi_it[last_it] + maj_ph_it[last_it] + maj_ui_it[last_it] + maj_uh_it[last_it]),
-                     sqrt(2 * (maj_pi_it_0 + maj_ph_it[last_it] + maj_ui_it_0 + maj_uh_it[last_it]) / (
+                     sqrt(2 * (maj_pi_it_aux + maj_ph_it[last_it] + maj_ui_it_aux + maj_uh_it[last_it]) / (
                              ep_enrg_it[last_it] + eu_enrg_it[last_it]))))
             print("-------------------------------------------------------------------")
+        # Accumulate majorants with auxuliary step improvement
         if n == 0:
-            maj_pi[n] = maj_pi_it_0
-            maj_ui[n] = maj_ui_it_0
+            maj_pi[n] = maj_pi_it_aux
+            maj_ui[n] = maj_ui_it_aux
         else:
-            maj_pi[n] = maj_pi[n - 1] + maj_pi_it_0
-            maj_ui[n] = maj_ui[n - 1] + maj_ui_it_0
+            maj_pi[n] = maj_pi[n - 1] + maj_pi_it_aux
+            maj_ui[n] = maj_ui[n - 1] + maj_ui_it_aux
+
         '''
+        # Accumulate majorants without a middle step improvement
         if n == 0:
             maj_pi[n] = maj_pi_it[i-1]
             maj_ui[n] = maj_ui_it[i-1]
         else:
-            maj_pi[n] = maj_pi[n - 1] + maj_pi_it_0
-            maj_ui[n] = maj_ui[n - 1] + maj_ui_it_0
+            maj_pi[n] = maj_pi[n - 1] + maj_pi_it[i-1]
+            maj_ui[n] = maj_ui[n - 1] + maj_ui_it[i-1]
         '''
 
         # Accumulate errors and majorants on all time steps
@@ -968,6 +947,7 @@ class BiotSolvers():
                                mu, lmbda,
                                error_control, ep_enrg, ep_l2, eu_enrg, eu_div, e_enrg, maj,
                                func_spaces, funcs):
+
         ep_enrg_it = error_control.get_error_array(1)
         eu_enrg_it = error_control.get_error_array(1)
         ep_l2_it = error_control.get_error_array(1)
@@ -1050,10 +1030,8 @@ class TestBiot():
         self.material_params = material_params
         self.test_params = test_params
 
-    def get_initial_pressure_and_displacement(self, ds, n,
-                                              p, u, v, theta, bc_p, bc_u, p_k, u_k,
-                                              f, t_N,
-                                              phi_f, g, alpha, mu, lmbda):
+    def get_initial_pressure_and_displacement(self, ds, n, p, u, v, theta, bc_p, bc_u, p_k, u_k, f, t_N, phi_f, g, alpha, mu, lmbda):
+
         # Define the variational formulation for pressure
         a_p0 = inner(grad(p), grad(theta)) * dx
         l_p0 = phi_f * inner(Constant((0, -g)), grad(theta)) * dx
@@ -1298,7 +1276,7 @@ class TestBiot():
                                                    test_params, func_spaces)
 
         # Set start time
-        t0_problem = time.clock()
+        t0_problem = process_time()
         # Solve Biot system
         error_p, errpr_pl2, error_u, error_udiv, e_p, e_u, e_enrg, maj_p, maj_u, maj \
             = self.solve_biot(func_spaces, funcs, facet_function, mesh,
@@ -1310,7 +1288,7 @@ class TestBiot():
         maj[test_params["time_steps"] - 1]
         '''
         # Set the final time
-        tfinal_problem = time.clock()
+        tfinal_problem = process_time()
         print('total values:')
         print('\t\th\t||| e_p |||^2\t\t\tMp^2\t||| e_u |||^2\t\t\tMu^2\t[(e_u, e_p)]^2\t M^2\t i_eff')
         print('%4.4e &\t %12.4e &\t %12.4e &\t %12.4e &\t %12.4e &\t %12.4e &\t%12.4e &\t%5.2f\n'
@@ -1357,8 +1335,7 @@ class TestBiot():
 
         return alpha, beta, kappa, min_eig_kappa, lmbda, mu
 
-    def solve_biot(self, func_spaces, funcs, facet_function, mesh,
-                   test_params, project_path, resultsfolder_name):
+    def solve_biot(self, func_spaces, funcs, facet_function, mesh, test_params, project_path, resultsfolder_name):
 
         # Define the value of the time-step
         tau = float(self.problem_data['t_T'] / test_params['time_steps'])
@@ -1498,6 +1475,7 @@ class TestBiot():
                 postprocess.plot_vector_function(u_n1, mesh, gdim,
                                                  project_path + resultsfolder_name + 'displacement-n-%d' % (n+1))
 
+                '''
                 postprocess.plot_function(interpolate(funcs["p_e"], func_spaces["Q_exact"]),
                                           mesh, gdim,
                                           project_path + resultsfolder_name + 'pressure-exact-n-%d' % (n+1))
@@ -1505,7 +1483,7 @@ class TestBiot():
                                                  mesh, gdim,
                                                  project_path + resultsfolder_name + 'displacement-exact-n-%d' % (
                                                          n+1))
-
+                '''
             # Update functions
             if self.test_params["coupling_approach"] == "fully-implicit":
                 #u_n = interpolate(funcs['u_e'], func_spaces['V'])
@@ -1515,10 +1493,10 @@ class TestBiot():
                 assign(p_n, p_n1)
 
             elif self.test_params["coupling_approach"] == "iterative":
-                u_n = interpolate(funcs['u_e'], func_spaces['V'])
-                p_n = interpolate(funcs['p_e'], func_spaces['Q'])
-                #assign(u_n, u_n1)   # u_{n} <- u_{n+1}
-                #assign(p_n, p_n1)   # p_{n} <- p_{n+1}
+                #u_n = interpolate(funcs['u_e'], func_spaces['V'])
+                #p_n = interpolate(funcs['p_e'], func_spaces['Q'])
+                assign(u_n, u_n1)   # u_{n} <- u_{n+1}
+                assign(p_n, p_n1)   # p_{n} <- p_{n+1}
                 #u_n.assign(u_n1)
                 #p_n.assign(p_n1)
             '''
@@ -1584,6 +1562,10 @@ if __name__ == '__main__':
     relative_error = "relative_error"
     absolute_error = "absolute_error"
 
+    # Refinement
+    uniform = "uniform"
+    adaptive = "adaptive"
+
     # Pressure recovery method
     CG_method = 'CG-method'
     mixed_method = 'mixed-method'
@@ -1596,15 +1578,18 @@ if __name__ == '__main__':
     tests = {1: tests.mandels_problem_2d_t,
              2: tests.simple_example_2d_t,
              3: tests.kolesov_example_2d_t,
-             4: tests.simple_example_2_2d_t,
+             4: tests.simple_example_2_2d_t, # example 1 (in the CAM paper)
              5: tests.simple_example_3d_t}
 
     # Set the number of the test and call for the problem data
-    test_num = 4
+    test_num = 2
 
-    resolutions = [64]
+    #resolutions = [64]
     #resolutions = [32]
-    #resolutions = [4, 8, 16, 32, 64]
+    #resolutions = [8, 16, 32, 64]
+    #resolutions = [8, 16, 32, 64]
+
+    resolutions = [8, 16, 32, 64]
 
     for i in range(0, len(resolutions)):
         # Init problem parameters
@@ -1615,7 +1600,7 @@ if __name__ == '__main__':
                            iter_accuracy=1e-4,  # Required accuracy at each interation cycle
                            time_steps=10,  # Number of time steps on the interval [0, t_T]
                            mesh_resolution=resolutions[i],  # Lever of refinement of initial mesh [4, 8, 16, 32, 64, 128]
-                           iter_num=7,
+                           iter_num=10,
                            coupling_approach=iterative_coupling,
                            pressure_recovery_method=CG_method,
                            full_documentation=True,
@@ -1624,7 +1609,7 @@ if __name__ == '__main__':
                            majorant_optimisation=True,
                            majorant_optimization_iterations_number=3,
                            test_num=test_num,
-                           output=console_output)
+                           output=file_output)
 
         problem_data, domain_params, material_params = tests[test_num]()
 

@@ -138,6 +138,7 @@ def output_errors_and_estimates_wrt_iterations(ep_array, epl2_array, eu_array, e
                  epl2_array[i], maj_epl2_array[i],
                  eu_array[i], maj_eu_array[i],
                  eudiv_array[i], maj_eudiv_array[i]))
+    '''
     print("")
     print("final iter & ||| e_p |||^2   \tM^2_ph \t\tM^2_pi & ||| e_u |||^2    \tM^2_uh  \tM^2_ui ")
     print("--------------------------------------------------------------------------------------")
@@ -146,6 +147,7 @@ def output_errors_and_estimates_wrt_iterations(ep_array, epl2_array, eu_array, e
               % (i+1, ep_array[i], maj_ep_array[i], maj_pi_it[i],
                  eu_array[i], maj_eu_array[i],  maj_ui_it[i]))
     print("")
+    '''
 
 # -------------------------------------------------------------------------------------------------------------------- #
 # Plotting functions
@@ -252,7 +254,7 @@ def plot_function_3d(mesh, f, result_path):
     d = mesh.geometry().dim()
 
     mesh_coordinates = mesh.coordinates().reshape((num_vert, d))
-    triangles = np.asarray([cell.entities(0) for cell in dolfin.cpp.mesh.cells(mesh)])
+    triangles = np.asarray([cell.entities(0) for cell in cells(mesh)])
     triangulation = tri.Triangulation(mesh_coordinates[:, 0],
                                       mesh_coordinates[:, 1],
                                       triangles)

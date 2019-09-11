@@ -225,7 +225,6 @@ def example_1_bothetall_paper_2d_t():
 
     return problem_data, domain_params, material_params
 
-
 def simple_example_2d_t():
     u0_expr = '(x[0] * x[0] + x[1] * x[1]) * t'
     u0_x_expr = '2*x[0] * t'
@@ -256,8 +255,8 @@ def simple_example_2d_t():
     f_1_expr = 'alpha * x[0] * (1 - x[0]) * (1 - 2.0 * x[1]) * t'
 
     gdim = 2
-    nu = 0.2  # Poinsson's ratio \in (0, 0.5)
-    E = 0.594 * 1e9    # Young modulus
+    nu = 0.2           # Poinsson's ratio \in (0, 0.5)
+    E = 0.594          # Young modulus
     mu = E / (2.0 * (1.0 + nu))  # Lame coeff. 1
     lmbda = E * nu / ((1.0 + nu) * (1.0 - 2.0 * nu))  # Lame coeff. 2
 
@@ -469,7 +468,7 @@ def mandels_problem_2d_t():
     u_c_5 = 'cos(alpha_5) / (alpha_5 - sin(alpha_5) * cos(alpha_5)) * exp(-alpha_5 * alpha_5 * c_f * t / a / a)'
 
     u_expr_0 = 'x[0] * F / mu / a * ( nu / 2 - nu_u * (' + u_b_1 + ' + ' + u_b_2 + ' + ' + u_b_3 + ' + ' + u_b_4 + ' + ' + u_b_5 + '))' \
-                                                                                                                                   '+ F / mu * (' + u_c_1 + ' * ' + u_a_1 + ' + ' \
+               '+ F / mu * (' + u_c_1 + ' * ' + u_a_1 + ' + ' \
                + u_c_2 + ' * ' + u_a_2 + ' + ' \
                + u_c_3 + ' * ' + u_a_3 + ' + ' \
                + u_c_4 + ' * ' + u_a_4 + ' + ' \
@@ -570,3 +569,90 @@ def kolesov_example_2d_t():
                            c=0.465)
 
     return problem_data, domain_params, material_params
+
+
+def simple_example_3_2d_t():
+    u0_expr = '(x[0] * x[0] + x[1] * x[1]) * (sin(t) + 1)'
+    u0_x_expr = '2*x[0] * (sin(t) + 1)'
+    u0_xt_expr = '2*x[0] * cos(t)'
+
+    u1_expr = '(x[0] + x[1]) * (sin(t) + 1)'
+    u1_y_expr = 'sin(t) + 1'
+    u1_yt_expr = 'cos(t)'
+
+    div_u_expr = u0_x_expr + ' + ' + u1_y_expr      # (sin(t) + 1)*(2*x + 1)
+    div_u_t_expr = u0_xt_expr + ' + ' + u1_yt_expr  # cos(t)*(2*x + 1)
+
+    p_expr = 'x[0] * (1 - x[0]) * x[1] * (1 - x[1]) * (t^2 + t + 1)'
+    p_x_expr = '(1 - 2 * x[0]) * x[1] * (1 - x[1]) * (t^2 + t + 1)'
+    p_y_expr = '(1 - 2 * x[1]) * x[0] * (1 - x[0]) * (t^2 + t + 1)'
+    p_xx_expr = '(-2) * x[1] * (1 - x[1]) * (t^2 + t + 1)'
+    p_yy_expr = '(-2) * x[0] * (1 - x[0]) * (t^2 + t + 1)'
+    p_t_expr = 'x[0] * (1 - x[0]) * x[1] * (1 - x[1]) * (2*t + 1)'
+
+    g_expr = 'beta * ' + p_t_expr + '+ alpha * ' + div_u_t_expr + '- (' + p_xx_expr + ' + ' + p_yy_expr + ')'
+             # bet*x*y*(x - 1)*(y - 1)*(2*t + 1) + alph*cos(t)*(2*x + 1) - 2*(t^2 + t + 1)*x*(x - 1) - 2*(t^2 + t + 1)*y*(y - 1)
+
+    # alph*t*y*(x - 1)*(y - 1) - 6*mu*t - 2*lmbda*t + alph*t*x*y*(y - 1)
+    f_0_expr = '- mu * 6.0 * t ' \
+               '- 2.0 * lmbda * t ' \
+               '+ alpha * x[1] * (1 - x[1]) * (1 - 2.0 * x[0]) * t'
+    # alph*t*x*(2*y - 1)*(x - 1)
+    f_1_expr = 'alpha * x[0] * (1 - x[0]) * (1 - 2.0 * x[1]) * t'
+
+    gdim = 2
+    nu = 0.2           # Poinsson's ratio \in (0, 0.5)
+    E = 0.594 * 1e9    # Young modulus
+    mu = E / (2.0 * (1.0 + nu))  # Lame coeff. 1
+    lmbda = E * nu / ((1.0 + nu) * (1.0 - 2.0 * nu))  # Lame coeff. 2
+
+    if gdim == 2:  # For the plain stress
+        lmbda = 2 * lmbda * mu / (lmbda + 2 * mu)
+
+    alpha = 1.0
+    c_0 = 1e-1
+    K = lmbda + 2 / 3 * mu  # skeleton bulk modulus
+    K_u = K + alpha ** 2 / c_0
+
+    min_eig_kappa = 1.0
+    c_f = 1 / c_0 * min_eig_kappa * (K + 4 / 3 * mu) / (K_u + 4 / 3 * mu)
+    phi_0 = 0.2
+    M = 1.65e10
+    beta = 1 / M + c_f * phi_0
+
+    a = 1.0
+    b = 1.0
+    C_FD = 1.0 / DOLFIN_PI / sqrt(1.0 / a ** 2 + 1.0 / b ** 2)
+
+    # Givien problem data
+    problem_data = dict(u_expr=[u0_expr, u1_expr],  # Exact solution
+                        p_expr=p_expr,
+                        f_expr=[f_0_expr, f_1_expr],  # Load function
+                        t_T=10.0,  # Final time
+                        g_expr=g_expr,  # Source function
+                        t_N_expr=['0.0', '0.0'],
+                        u0_expr=['0.0', '0.0'],
+                        p0_expr='0.0')
+
+    # Domain parameters
+    domain_params = dict(domain_type="rectangular-domain",
+                         l_x=a,  # a
+                         l_y=b,  # b
+                         l_z=0.0,
+                         gdim=gdim,
+                         C_FD=C_FD)
+
+    # Material parameters
+    material_params = dict(mu=mu,
+                           E=E,
+                           lmbda=lmbda,
+                           nu=nu,  # Poinsson's ratio
+                           alpha=alpha,  # Biot's constant
+                           beta=beta,  #
+                           kappa=[[1, 0], [0, 1]],  # permiability
+                           mu_f=1.0,
+                           c=c_f,
+                           min_eig_kappa=1.0)
+
+    return problem_data, domain_params, material_params
+
