@@ -13,12 +13,6 @@ import tests, problem, postprocess
 #from dolfin.cpp.la import list_linear_solver_methods, list_krylov_solver_preconditioners
 #from matplotlib import interactive
 
-# https://fenicsproject.org/olddocs/dolfin/1.3.0/python/programmers-reference/fem/solving/solve.html
-# https://fenicsproject.org/pub/tutorial/sphinx1/._ftut1006.html#ftut-app-solver-prec
-# solve(A1, u1.vector(), b1, ’bicgstab’, ’hypre_amg’)
-# solve(A2, p1.vector(), b2, ’bicgstab’, ’hypre_amg’)
-# solve(A3, u1.vector(), b3, ’cg’, ’sor’)
-
 parameters['form_compiler']['optimize'] = True
 parameters['form_compiler']['cpp_optimize'] = True
 
@@ -1619,7 +1613,7 @@ if __name__ == '__main__':
                            flux_approx_order=2,
                            stress_approx_order=2,
                            iter_accuracy=1e-4,  # Required accuracy at each interation cycle
-                           time_steps=1000,  # Number of time steps on the interval [0, t_T]
+                           time_steps=10,  # Number of time steps on the interval [0, t_T]
                            mesh_resolution=resolutions[i],  # Lever of refinement of initial mesh [4, 8, 16, 32, 64, 128]
                            iter_num=7,
                            coupling_approach=iterative_coupling,
