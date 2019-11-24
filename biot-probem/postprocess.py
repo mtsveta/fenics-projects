@@ -126,7 +126,7 @@ def output_errors_wrt_iterations(ep_array, epl2_array, eu_array, eudiv_array, IT
 def output_errors_and_estimates_wrt_iterations(ep_array, epl2_array, eu_array, eudiv_array,
                                                maj_ep_array, maj_epl2_array, maj_eu_array, maj_eudiv_array,
                                                maj_pi_it, maj_ui_it,
-                                               ITER_NUM):
+                                               ITER_NUM, norm_p, norm_u):
 
     print("")
     print("iter # & ||| e_p |||^2   M^2_p     & || e_p ||^2_{L2}    M^2_{L2}  & ||| e_u |||^2   M^2_{u}    & || div e_u ||^2    M^2_{divu}")
@@ -134,10 +134,10 @@ def output_errors_and_estimates_wrt_iterations(ep_array, epl2_array, eu_array, e
     #for i in range(ITER_NUM-2, ITER_NUM):
     for i in range(0, ITER_NUM):
         print("    %2d & %10.4e     %10.4e & %14.4e     %10.4e & %10.4e     %10.4e  & %14.4e     %10.4e "
-              % (i+1, ep_array[i], maj_ep_array[i],
-                 epl2_array[i], maj_epl2_array[i],
-                 eu_array[i], maj_eu_array[i],
-                 eudiv_array[i], maj_eudiv_array[i]))
+              % (i+1, ep_array[i] / norm_p, maj_ep_array[i] / norm_p,
+                 epl2_array[i] / norm_p, maj_epl2_array[i] / norm_p,
+                 eu_array[i] / norm_u, maj_eu_array[i] / norm_u,
+                 eudiv_array[i] / norm_u, maj_eudiv_array[i] / norm_u))
     '''
     print("")
     print("final iter & ||| e_p |||^2   \tM^2_ph \t\tM^2_pi & ||| e_u |||^2    \tM^2_uh  \tM^2_ui ")
