@@ -665,13 +665,11 @@ class BiotSolvers():
                            alpha, mu, lmbda, L, q, ds,
                            u_i, u_i1, p_i, p_i1,
                            g_tilde, funcs, func_spaces,
-                           test_params):
+                           test_params,
+                           norm_p_accum, norm_u_accum):
 
         gdim = domain_params['gdim']
         C_FD = domain_params["C_FD"]
-
-        norm_p_accum = error_control.get_error_array(test_params["iter_num"])
-        norm_u_accum = error_control.get_error_array(test_params["iter_num"])
 
         ep_enrg_it = error_control.get_error_array(test_params["iter_num"])
         eu_enrg_it = error_control.get_error_array(test_params["iter_num"])
@@ -745,7 +743,7 @@ class BiotSolvers():
             eta_i1 = project(alpha / gamma * div(u_i1) - L / gamma * p_i1, func_spaces["Q"])
             eta_i = project(alpha / gamma * div(u_i) - L / gamma * p_i, func_spaces["Q"])
 
-            pow = 6
+            pow = 3
             aux_it = test_params["iter_num"] - pow
 
             if i == aux_it:
@@ -877,12 +875,13 @@ class BiotSolvers():
             print("based on q_aux: M^{2,i}(u) = %.4e\n" % (maj_ui_it_aux / norm_u))
 
         # Get the value from the last iteration for all the discretisation norms
-        ep_enrg, ep_l2, eu_enrg, eu_div, maj_ph, maj_phl2, maj_uh, maj_uhdiv, maj_pi, maj_ui,  = \
+        ep_enrg, ep_l2, eu_enrg, eu_div, maj_ph, maj_phl2, maj_uh, maj_uhdiv, maj_pi, maj_ui, norm_p_accum, norm_u_accum = \
             self.get_last_iter(n, last_it,
                                ep_enrg, ep_l2, eu_enrg, eu_div, maj_ph, maj_phl2, maj_uh, maj_uhdiv, maj_pi, maj_ui,
                                ep_enrg_it, ep_l2_it, eu_enrg_it, eu_div_it,
                                maj_ph_it, maj_phl2_it, maj_uh_it, maj_uhdiv_it,
-                               maj_pi_it, maj_ui_it, norm_p, norm_u, norm_p_accum, norm_u_accum)
+                               maj_pi_it, maj_ui_it,
+                               norm_p, norm_u, norm_p_accum, norm_u_accum)
 
         # Correction of accumulate majorants with auxuliary step improvement
         # HOW TO SCALE HERE CORRECTLY ??
@@ -915,14 +914,15 @@ class BiotSolvers():
             print("improved increment on the %dth interval " % (n + 1))
             print("-------------------------------------------------------------------")
             print("||| e_p |||^2  = %.4e, Mp^2  = %.4e, i_eff(Mp)  = %.2f" % (
-                ep_enrg_it[last_it] / norm_p, 2 * (maj_pi_it_aux + maj_ph_it[last_it]) / norm_p,
+                ep_enrg_it[last_it] / norm_p,
+                2 * (maj_pi_it_aux + maj_ph_it[last_it]) / norm_p,
                 sqrt((2 * (maj_pi_it_aux + maj_ph_it[last_it])) / ep_enrg_it[last_it])))
             print("||| e_u |||^2  = %.4e, Mu^2  = %.4e, i_eff(Mu)  = %.2f" % (
                 eu_enrg_it[last_it] / norm_u, 2 * (maj_ui_it_aux + maj_uh_it[last_it]) / norm_u,
                 sqrt((2 * (maj_ui_it_aux + maj_uh_it[last_it])) / eu_enrg_it[last_it])))
             print("-------------------------------------------------------------------")
             print("[(e_u, e_p)]^2 = %.4e, Mit^2 = %.4e, i_eff(Mit) = %.2f"
-                      % (ep_enrg_it[last_it] + eu_enrg_it[last_it] / max([norm_p, norm_u]),
+                      % ((ep_enrg_it[last_it] + eu_enrg_it[last_it]) / max([norm_p, norm_u]),
                          2 * (maj_pi_it[last_it] + maj_ph_it[last_it] + maj_ui_it[last_it] + maj_uh_it[last_it]) / max([norm_p, norm_u]),
                      sqrt(2 * (maj_pi_it_aux + maj_ph_it[last_it] + maj_ui_it_aux + maj_uh_it[last_it]) / (
                              ep_enrg_it[last_it] + eu_enrg_it[last_it]))))
@@ -947,13 +947,14 @@ class BiotSolvers():
             print("-------------------------------------------------------------------")
             print("[(e_u, e_p)]^2 = %.4e, M^2  = %.4e, i_eff(M) = %.2f" % (e[n], maj[n], sqrt(maj[n] / e[n])))
             print("-------------------------------------------------------------------")
-        input("Press")
+        #input("Press")
 
         return u_i1, p_i1, \
                ep_enrg, ep_l2, eu_enrg, eu_div, \
                e_p, e_u, e, \
                maj_ph, maj_phl2, maj_uh, maj_uhdiv, maj_pi, maj_ui, \
-               maj_p, maj_u, maj
+               maj_p, maj_u, maj, \
+               norm_p_accum, norm_u_accum
 
     # Function with full-implicit procedure
     def full_implicit_coupling(self,
@@ -1388,6 +1389,9 @@ class TestBiot():
                                      func_spaces['V_exact'], func_spaces['Q_exact'],
                                      self.domain_params["gdim"])
 
+        norm_p_accum = error_control.get_error_array(test_params["time_steps"])
+        norm_u_accum = error_control.get_error_array(test_params["time_steps"])
+
         ep_enrg = error_control.get_error_array(test_params["time_steps"])
         eu_enrg = error_control.get_error_array(test_params["time_steps"])
         ep_l2 = error_control.get_error_array(test_params["time_steps"])
@@ -1473,14 +1477,16 @@ class TestBiot():
                 ep_enrg, ep_l2, eu_enrg, eu_div, ep, eu, e, \
                 maj_ph, maj_phl2, maj_uh, maj_uhdiv, \
                 maj_pi, maj_ui, \
-                maj_p, maj_u, maj = biot_solver.iterative_coupling(n, u, p, v, theta, bc_p, bc_u,
+                maj_p, maj_u, maj , \
+                norm_p_accum, norm_u_accum = biot_solver.iterative_coupling(n, u, p, v, theta, bc_p, bc_u,
                                                      error_control, ep_enrg, ep_l2, eu_enrg, eu_div, ep, eu, e,
                                                      maj_ph, maj_phl2, maj_uh, maj_uhdiv, maj_pi, maj_ui, maj_p, maj_u,
                                                      maj,
                                                      alpha, mu, lmbda, L_opt, q_opt, ds,
                                                      u_k, u_k1, p_k, p_k1,
                                                      g_tilde,
-                                                     funcs, func_spaces, test_params)
+                                                     funcs, func_spaces, test_params,
+                                                     norm_p_accum, norm_u_accum)
             # Update time layer
             t_n1 += tau
             t_n += tau
@@ -1607,7 +1613,7 @@ if __name__ == '__main__':
              102: tests.simple_example_2_2d_t_EGPa_K100,
              103: tests.simple_example_2d_t_bothetall_paper_parameters}
     # Set the number of the test and call for the problem data
-    test_num = 101
+    test_num = 103
 
     #resolutions = [64]
     #resolutions = [32]
@@ -1625,16 +1631,16 @@ if __name__ == '__main__':
                            iter_accuracy=1e-4,  # Required accuracy at each interation cycle
                            time_steps=10,  # Number of time steps on the interval [0, t_T]
                            mesh_resolution=resolutions[i],  # Lever of refinement of initial mesh [4, 8, 16, 32, 64, 128]
-                           iter_num=14,
+                           iter_num=5,
                            coupling_approach=iterative_coupling,
                            pressure_recovery_method=CG_method,
                            full_documentation=True,
                            error_format=relative_error, #absolute_error,
                            error_estimates=True,
                            majorant_optimisation=True,
-                           majorant_optimization_iterations_number=0,
+                           majorant_optimization_iterations_number=3,
                            test_num=test_num,
-                           output=console_output)
+                           output=file_output)
 
         problem_data, domain_params, material_params = tests[test_num]()
 

@@ -351,9 +351,9 @@ def simple_example_2d_t_bothetall_paper_parameters():
     p_yy_expr = '1e8 * (-2) * x[0] * (1 - x[0]) * t'
     p_t_expr = '1e8 * x[0] * (1 - x[0]) * x[1] * (1 - x[1])'
 
-    k11 = 1.0
-    k22 = 1.0
-    min_eig_kappa = 1.0
+    k11 = 100.0
+    k22 = 100.0
+    min_eig_kappa = 100.0
 
     #k11 = 100.0
     #k22 = 100.0
