@@ -216,7 +216,8 @@ class ErrorControl():
         # Define variational forms
         #print("inv(A)" , inv(A))
 
-        var_m_d = inner(inv(A) * r_d, r_d)
+        #var_m_d = abs(inner(inv(A) * r_d, r_d))
+        var_m_d = (inner(inv(A) * r_d, r_d))
         var_m_f = inner(r_f, r_f)
 
         # Define majorant components
@@ -226,9 +227,9 @@ class ErrorControl():
         m_f_w_opt = assemble(mu_opt / react * var_m_f * dx)  # for calculating majorant
         m_f_one_minus_mu_opt = assemble((1 - mu_opt) ** 2 * var_m_f * dx)  # fo calculating beta_opt
 
-        #print("m_f_one_minus_mu_opt = ", m_f_one_minus_mu_opt)
-        #print("m_d = ", m_d)
-        #print("min_eig_A = ", min_eig_A)
+        print("m_f_one_minus_mu_opt = ", m_f_one_minus_mu_opt)
+        print("m_d = ", m_d)
+        print("min_eig_A = ", min_eig_A)
         #input("Press Enter")
 
         # Calculate majorant based on the parameter value
@@ -391,6 +392,7 @@ class ErrorControl():
         # Initial flux guess
         #y = project(funcs["kappa"] * nabla_grad(p), func_spaces["H_div"])
         #y = project(funcs["kappa"] * grad(p), func_spaces["H_div"])
+        #print("kappa = ", funcs["kappa"])
         y = project(funcs["kappa"] * grad(interpolate(funcs["p_e"], self.Qe)), func_spaces["H_div"]) # exact flux for debugging
         # Auxiliary Young's parameter
         beta = 1.0
@@ -1207,7 +1209,8 @@ class TestBiot():
                 self.test_params['test_num'] == 4 or \
                 self.test_params['test_num'] == 101 or \
                 self.test_params['test_num'] == 102 or \
-                self.test_params['test_num'] == 103:
+                self.test_params['test_num'] == 103 or \
+                self.test_params['test_num'] == 104:
             # Exact pressure and displacement
             p_e = Expression(self.problem_data['p_expr'], t=0.0, degree=4)
             u_e = Expression((self.problem_data['u_expr'][0], self.problem_data['u_expr'][1]), t=0, degree=4)
@@ -1558,7 +1561,8 @@ class TestBiot():
                 self.test_params['test_num'] == 4 or \
                 self.test_params['test_num'] == 101 or \
                 self.test_params['test_num'] == 102 or \
-                self.test_params['test_num'] == 103:
+                self.test_params['test_num'] == 103 or \
+                self.test_params['test_num'] == 104:
             # Set Dirichlet BC for pressure and displacement on the whole boundary
             if self.test_params["coupling_approach"] == "fully-implicit":
                 bcs_p = DirichletBC(func_spaces["W"].sub(1), funcs['p_e'], DirichletBoundary())
@@ -1611,16 +1615,18 @@ if __name__ == '__main__':
              5: tests.simple_example_3d_t,
              101: tests.simple_example_2_2d_t_EGPa,
              102: tests.simple_example_2_2d_t_EGPa_K100,
-             103: tests.simple_example_2d_t_bothetall_paper_parameters}
+             103: tests.simple_example_2d_t_bothetall_paper_parameters,
+             104: tests.simple_example_2d_t_lubrication_paper_parameters}
     # Set the number of the test and call for the problem data
-    test_num = 103
+    test_num = 104
 
     #resolutions = [64]
     #resolutions = [32]
     #resolutions = [8, 16, 32, 64]
     #resolutions = [8, 16, 32, 64]
 
-    resolutions = [4, 8, 16, 32, 64]
+    #resolutions = [4, 8, 16, 32, 64]
+    resolutions = [4, 8, 16, 32]
 
     for i in range(0, len(resolutions)):
         # Init problem parameters
@@ -1638,7 +1644,7 @@ if __name__ == '__main__':
                            error_format=relative_error, #absolute_error,
                            error_estimates=True,
                            majorant_optimisation=True,
-                           majorant_optimization_iterations_number=3,
+                           majorant_optimization_iterations_number=0,
                            test_num=test_num,
                            output=file_output)
 

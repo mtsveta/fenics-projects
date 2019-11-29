@@ -240,10 +240,10 @@ def simple_example_2_2d_t_EGPa():
     return problem_data, domain_params, material_params
 
 def simple_example_2_2d_t_EGPa_K100():
-    p_expr = 'x[0] * (1 - x[0]) * x[1] * (1 - x[1]) * t'
-    p_xx_expr = '(-2) * x[1] * (1 - x[1]) * t'
-    p_yy_expr = 'x[0] * (1 - x[0]) * (-2) * t'
-    p_t_expr = 'x[0] * (1 - x[0]) * x[1] * (1 - x[1])'
+    p_expr = '1e8*x[0] * (1 - x[0]) * x[1] * (1 - x[1]) * t'
+    p_xx_expr = '1e8*(-2) * x[1] * (1 - x[1]) * t'
+    p_yy_expr = '1e8*x[0] * (1 - x[0]) * (-2) * t'
+    p_t_expr = '1e8*x[0] * (1 - x[0]) * x[1] * (1 - x[1])'
 
     u0_expr = '(1 - x[0]) * x[0] * (1 - x[1]) * x[1] * t'
     u0_x_expr = '(1 - 2 * x[0]) * (1 - x[1]) * x[1] * t'
@@ -267,8 +267,16 @@ def simple_example_2_2d_t_EGPa_K100():
     # g            = x[0] + x[1] - 4*x[0]*x[1] + 2*x[0]*x[1]*x[1] + 2*x[0]*x[0]*x[1] - x[0]*x[0] - x[1]*x[1] - 2*t*x[0]*(x[0] - 1) - 2*t*x[1]*(x[1] - 1) + x[0]*x[1]*(x[0] - 1)*(x[1] - 1)
     # x + y - 4*x*y + 2*x*y^2 + 2*x^2*y - x^2 - y^2 - 2*t*x*(x - 1) - 2*t*y*(y - 1) + x*y*(x - 1)*(y - 1)
 
-    f0_expr = 'alpha*t*x[1]*(x[0] - 1)*(x[1] - 1) - mu*t*(4*x[0]*x[1] - 2*x[1] - 4*x[0] + 2*x[0]*x[0] + 1) - 4*mu*t*x[1]*(x[1] - 1) - lmbda*t*(4*x[0]*x[1] - 4*x[1] - 2*x[0] + 2*x[1]*x[1] + 1) + alpha*t*x[0]*x[1]*(x[1] - 1)'
-    f1_expr = 'alpha*t*x[0]*(x[0] - 1)*(x[1] - 1) - mu*t*(4*x[0]*x[1] - 4*x[1] - 2*x[0] + 2*x[1]*x[1] + 1) - 4*mu*t*x[0]*(x[0] - 1) - lmbda*t*(4*x[0]*x[1] - 2*x[1] - 4*x[0] + 2*x[0]*x[0] + 1) + alpha*t*x[0]*x[1]*(x[0] - 1)'
+    f0_expr = '1e8*alpha*t*x[1]*(x[0] - 1)*(x[1] - 1) ' \
+              '- mu*t*(4*x[0]*x[1] - 2*x[1] - 4*x[0] + 2*x[0]*x[0] + 1) ' \
+              '- 4*mu*t*x[1]*(x[1] - 1) ' \
+              '- lmbda*t*(4*x[0]*x[1] - 4*x[1] - 2*x[0] + 2*x[1]*x[1] + 1) ' \
+              '+ 1e8*alpha*t*x[0]*x[1]*(x[1] - 1)'
+    f1_expr = '1e8*alpha*t*x[0]*(x[0] - 1)*(x[1] - 1) ' \
+              '- mu*t*(4*x[0]*x[1] - 4*x[1] - 2*x[0] + 2*x[1]*x[1] + 1) ' \
+              '- 4*mu*t*x[0]*(x[0] - 1) ' \
+              '- lmbda*t*(4*x[0]*x[1] - 2*x[1] - 4*x[0] + 2*x[0]*x[0] + 1) ' \
+              '+ 1e8*alpha*t*x[0]*x[1]*(x[0] - 1)'
     # f =
     # -t*(2*x^2 - 2*x*y^2 + 10*x*y - 6*x + 7*y^2 - 11*y + 2)
     # -t*(- 2*x^2*y + 7*x^2 + 10*x*y - 11*x + 2*y^2 - 6*y + 2)
@@ -325,7 +333,7 @@ def simple_example_2_2d_t_EGPa_K100():
                            nu=nu,  # Poinsson's ratio
                            alpha=alpha,  # Biot's constant
                            beta=beta,  #
-                           kappa=[[k11, 0], [k22, 1]],  # permiability
+                           kappa=[[k11, 0], [0, k22]],  # permiability
                            mu_f=1.0,
                            c=c_f,
                            min_eig_kappa=min_eig_kappa)
@@ -423,6 +431,127 @@ def simple_example_2d_t_bothetall_paper_parameters():
                            beta=beta,  #
                            kappa=[[k11, 0], [0, k22]],  # permiability
                            mu_f=1.0,
+                           c=c_f,
+                           min_eig_kappa=min_eig_kappa)
+
+    return problem_data, domain_params, material_params
+
+def simple_example_2d_t_lubrication_paper_parameters():
+    u0_expr = '(x[0] * x[0] + x[1] * x[1]) * t'
+    u0_x_expr = '2*x[0] * t'
+    u0_xt_expr = '2*x[0]'
+
+    u1_expr = '(x[0] + x[1]) * t'
+    u1_y_expr = 't'
+    u1_yt_expr = '1'
+
+    div_u_expr = u0_x_expr + ' + ' + u1_y_expr      # t*(2*x + 1)
+    div_u_t_expr = u0_xt_expr + ' + ' + u1_yt_expr  # 2*x + 1
+
+    p_expr = '1e8 * x[0] * (1 - x[0]) * x[1] * (1 - x[1]) * t'
+    p_x_expr = '1e8 * (1 - 2 * x[0]) * x[1] * (1 - x[1]) * t'
+    p_y_expr = '1e8 * (1 - 2 * x[1]) * x[0] * (1 - x[0]) * t'
+    p_xx_expr = '1e8 * (-2) * x[1] * (1 - x[1]) * t'
+    p_yy_expr = '1e8 * (-2) * x[0] * (1 - x[0]) * t'
+    p_t_expr = '1e8 * x[0] * (1 - x[0]) * x[1] * (1 - x[1])'
+
+    # set 1
+    #k11 = 50.0 # reservour permiability
+    #k22 = 200.0
+    #min_eig_kappa = 50.0
+    #mu_f = 1                   # fluid viscosity
+
+    # set 2
+    #k11 = 50.0 * 1e-6
+    #k22 = 200.0 * 1e-6
+    #min_eig_kappa = 50.0 * 1e-6
+    #mu_f = 1e-3
+
+    # set 3
+    #k11 = 50.0 * 1e-10
+    #k22 = 200.0 * 1e-10
+    #min_eig_kappa = 50.0 * 1e-10
+    #mu_f = 1e-3
+
+    # set 4
+    k11 = 50.0 * 1e-15
+    k22 = 200.0 * 1e-15
+    min_eig_kappa = 50.0 * 1e-15
+    mu_f = 1e-3
+
+    #k11 = 50.0 * 1e-6
+    #k22 = 200.0 * 1e-6
+    #min_eig_kappa = 50.0 * 1e-6
+    #mu_f = 1e-3
+
+    #k11 = 100.0
+    #k22 = 100.0
+    #min_eig_kappa = 100.0
+
+    #K_grap_p_expr = [k11 * p_x_expr, k22 * p_y_expr]
+    #div_K_grap_p_expr = k11 * p_xx_expr + ' + ' + k22 * p_yy_expr  # 2 * 1e11 * t * (x * (x - 1) + y * (y - 1))
+
+    g_expr = 'beta * ' + p_t_expr + '+ alpha * ' + div_u_t_expr \
+             + '- (' + str(k11) + '*' + p_xx_expr + ' + ' + str(k22) + '*' + p_yy_expr + ')'
+             # bet*1e8*x*y*(x - 1)*(y - 1) + alph*(2*x + 1) - 2*t*1e8*x*(x - 1) - 2*t*1e8*y*(y - 1)
+
+    # alph*t*1e8 * y*(x - 1)*(y - 1) - 6*mu*t - 2*lmbda*t + alph*1e8 * t*x*y*(y - 1)
+    f_0_expr = '- mu * 6.0 * t ' \
+               '- 2.0 * lmbda * t ' \
+               '+ alpha * 1e8 * x[1] * (1 - x[1]) * (1 - 2.0 * x[0]) * t'
+    # alph*1e8 * t*x*(2*y - 1)*(x - 1)
+    f_1_expr = 'alpha * 1e8 * x[0] * (1 - x[0]) * (1 - 2.0 * x[1]) * t'
+
+    gdim = 2
+    nu = 0.2       # Poinsson's ratio \in (0, 0.5)
+    E = 7 * 1e7    # Young modulus
+    mu = E / (2.0 * (1.0 + nu))  # Lame coeff. 1
+    lmbda = E * nu / ((1.0 + nu) * (1.0 - 2.0 * nu))  # Lame coeff. 2
+
+    if gdim == 2:  # For the plain stress
+        lmbda = 2 * lmbda * mu / (lmbda + 2 * mu)
+
+    alpha = 1.0
+    c_0 = 1e-1
+    K = lmbda + 2 / 3 * mu  # skeleton bulk modulus
+    K_u = K + alpha ** 2 / c_0
+
+    c_f = 1 / c_0 * min_eig_kappa * (K + 4 / 3 * mu) / (K_u + 4 / 3 * mu)
+    phi_0 = 0.2 # initial porosity
+    M = 1.4514e4
+    beta = 1 / M + c_f * phi_0
+
+    a = 1.0
+    b = 1.0
+    C_FD = 1.0 / DOLFIN_PI / sqrt(1.0 / a ** 2 + 1.0 / b ** 2)
+
+    # Givien problem data
+    problem_data = dict(u_expr=[u0_expr, u1_expr],  # Exact solution
+                        p_expr=p_expr,
+                        f_expr=[f_0_expr, f_1_expr],  # Load function
+                        t_T=10.0,  # Final time
+                        g_expr=g_expr,  # Source function
+                        t_N_expr=['0.0', '0.0'],
+                        u0_expr=['0.0', '0.0'],
+                        p0_expr='0.0')
+
+    # Domain parameters
+    domain_params = dict(domain_type="rectangular-domain",
+                         l_x=a,  # a
+                         l_y=b,  # b
+                         l_z=0.0,
+                         gdim=gdim,
+                         C_FD=C_FD)
+
+    # Material parameters
+    material_params = dict(mu=mu,
+                           E=E,
+                           lmbda=lmbda,
+                           nu=nu,  # Poinsson's ratio
+                           alpha=alpha,  # Biot's constant
+                           beta=beta,  #
+                           kappa=[[k11, 0], [0, k22]],  # permiability
+                           mu_f=mu_f,
                            c=c_f,
                            min_eig_kappa=min_eig_kappa)
 
