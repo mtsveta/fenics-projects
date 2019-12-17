@@ -133,7 +133,7 @@ def output_errors_and_estimates_wrt_iterations(ep_array, epl2_array, eu_array, e
     print("--------------------------------------------------------------------------------------------------------------------------------------")
     #for i in range(ITER_NUM-2, ITER_NUM):
     for i in range(0, ITER_NUM):
-        print("    %2d & %10.4e     %10.4e & %14.4e     %10.4e & %10.4e     %10.4e  & %14.4e     %10.4e "
+        print("    %2d & %10.4e &    %10.4e & %14.4e  &   %10.4e & %10.4e &    %10.4e  & %14.4e   &  %10.4e \\\\"
               % (i+1, ep_array[i] / norm_p, maj_ep_array[i] / norm_p,
                  epl2_array[i] / norm_p, maj_epl2_array[i] / norm_p,
                  eu_array[i] / norm_u, maj_eu_array[i] / norm_u,

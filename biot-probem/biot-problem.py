@@ -619,6 +619,7 @@ class BiotSolvers():
         self.domain_params = domain_params
         self.test_params = test_params
 
+    '''
     def get_last_iter(self, n, i,
                       ep_enrg, ep_l2, eu_enrg, eu_div, maj_ph, maj_phl2, maj_uh, maj_uhdiv, maj_pi, maj_ui,
                       ep_enrg_it, ep_l2_it, eu_enrg_it, eu_div_it, maj_ph_it, maj_phl2_it, maj_uh_it, maj_uhdiv_it,
@@ -656,6 +657,154 @@ class BiotSolvers():
             maj_ui[n] = (maj_ui[n-1] + maj_ui_it[i]) / norm_u_accum[n]
 
         return ep_enrg, ep_l2, eu_enrg, eu_div, maj_ph, maj_phl2, maj_uh, maj_uhdiv, maj_pi, maj_ui, norm_p_accum, norm_u_accum
+    '''
+
+    def get_last_iter(self, n, i,
+                      ep_enrg, ep_l2, eu_enrg, eu_div, maj_ph, maj_phl2, maj_uh, maj_uhdiv, maj_pi, maj_ui,
+                      ep_enrg_it, ep_l2_it, eu_enrg_it, eu_div_it,
+                      maj_ph_it, maj_phl2_it, maj_uh_it, maj_uhdiv_it,
+                      maj_pi_it, maj_ui_it,
+                      maj_pi_it_aux, maj_ui_it_aux,
+                      e, e_p, e_u, maj_p, maj_u, maj,
+                      norm_p, norm_u,
+                      norm_p_accum, norm_u_accum):
+        if n == 0:
+            norm_p_accum[n] = norm_p
+            norm_u_accum[n] = norm_u
+
+            ep_enrg[n] = ep_enrg_it[i]
+            ep_l2[n] = ep_l2_it[i]
+            eu_enrg[n] = eu_enrg_it[i]
+            eu_div[n] = eu_div_it[i]
+
+            maj_ph[n] = maj_ph_it[i]
+            maj_phl2[n] = maj_phl2_it[i]
+            maj_uh[n] = maj_uh_it[i]
+            maj_uhdiv[n] = maj_uhdiv_it[i]
+
+            maj_pi[n] = maj_pi_it[i]
+            maj_ui[n] = maj_ui_it[i]
+
+            # Correction of the maj_pi and maj_ui
+            maj_pi[n] = maj_pi_it_aux
+            maj_ui[n] = maj_ui_it_aux
+
+            # Using auxiliary majorant
+            e_p[n] = ep_enrg_it[i]
+            e_u[n] = eu_enrg_it[i]
+            e[n] = ep_enrg_it[i] + eu_enrg_it[i]
+
+            maj_p[n] = 2 * (maj_pi_it_aux + maj_ph_it[i])
+            maj_u[n] = 2 * (maj_ui_it_aux + maj_uh_it[i])
+            maj[n] = 2 * (maj_pi_it_aux + maj_ph_it[i] + maj_ui_it_aux + maj_uh_it[i])
+
+        else:
+
+            print("norm_p_accum[n - 1]", norm_p_accum[n - 1])
+            print("norm_p_accum[n - 1]", norm_p_accum[n - 1])
+            print("norm_p_accum[n]", norm_p_accum[n])
+            print("norm_u_accum[n]", norm_u_accum[n])
+
+            norm_p_accum[n] = norm_p_accum[n - 1] + norm_p
+            norm_u_accum[n] = norm_u_accum[n - 1] + norm_u
+
+            ep_enrg[n] = ep_enrg[n - 1] + ep_enrg_it[i]
+            ep_l2[n] = ep_l2[n - 1] + ep_l2_it[i]
+            eu_enrg[n] = eu_enrg[n - 1] + eu_enrg_it[i]
+            eu_div[n] = eu_div[n - 1] + eu_div_it[i]
+
+            maj_ph[n] = maj_ph[n - 1] + maj_ph_it[i]
+            maj_phl2[n] = maj_phl2[n - 1] + maj_phl2_it[i]
+            maj_uh[n] = maj_uh[n - 1] + maj_uh_it[i]
+            maj_uhdiv[n] = maj_uhdiv[n - 1] + maj_uhdiv_it[i]
+
+            maj_pi[n] = maj_pi[n - 1] + maj_pi_it[i]
+            maj_ui[n] = maj_ui[n - 1] + maj_ui_it[i]
+
+            # Using auxiliary majorant
+            e_p[n] = e_p[n - 1] + ep_enrg_it[i]
+            e_u[n] = e_u[n - 1] + eu_enrg_it[i]
+            e[n] = e[n - 1] + ep_enrg_it[i] + eu_enrg_it[i]
+
+            maj_p[n] = maj_p[n - 1] + 2 * (maj_pi_it_aux + maj_ph_it[i])
+            maj_u[n] = maj_u[n - 1] + 2 * (maj_ui_it_aux + maj_uh_it[i])
+            maj[n] = maj[n - 1] + 2 * (maj_pi_it_aux + maj_ph_it[i] + maj_ui_it_aux + maj_uh_it[i])
+
+        '''
+        if n == 0 :
+            norm_p_accum[n] = norm_p
+            norm_u_accum[n] = norm_u
+
+            ep_enrg[n] = ep_enrg_it[i] / norm_p
+            ep_l2[n] = ep_l2_it[i] / norm_p
+            eu_enrg[n] = eu_enrg_it[i] / norm_u
+            eu_div[n] = eu_div_it[i] / norm_u
+
+            maj_ph[n] = maj_ph_it[i] / norm_p
+            maj_phl2[n] = maj_phl2_it[i] / norm_p
+            maj_uh[n] = maj_uh_it[i] / norm_u
+            maj_uhdiv[n] = maj_uhdiv_it[i] / norm_u
+
+
+            maj_pi[n] = maj_pi_it[i] / norm_p
+            maj_ui[n] = maj_ui_it[i] / norm_u
+
+            # Correction of the maj_pi and maj_ui
+            maj_pi[n] = maj_pi_it_aux / norm_p_accum[n]
+            maj_ui[n] = maj_ui_it_aux / norm_u_accum[n]
+
+            # Using auxiliary majorant
+            e_p[n] = ep_enrg_it[i] / norm_p_accum[n]
+            e_u[n] = eu_enrg_it[i] / norm_u_accum[n]
+            e[n] = (ep_enrg_it[i] + eu_enrg_it[i]) / max([norm_p_accum[n], norm_u_accum[n]])
+
+            maj_p[n] = 2 * (maj_pi_it_aux + maj_ph_it[i]) / norm_p_accum[n]
+            maj_u[n] = 2 * (maj_ui_it_aux + maj_uh_it[i]) / norm_u_accum[n]
+            maj[n] = 2 * (maj_pi_it_aux + maj_ph_it[i] + maj_ui_it_aux + maj_uh_it[i]) / max([norm_p_accum[n], norm_u_accum[n]])
+
+
+        else:
+
+            print("norm_p_accum[n - 1]", norm_p_accum[n - 1])
+            print("norm_p_accum[n - 1]", norm_p_accum[n - 1])
+            print("norm_p_accum[n]", norm_p_accum[n])
+            print("norm_u_accum[n]", norm_u_accum[n])
+
+            norm_p_accum[n] = norm_p_accum[n - 1] + norm_p
+            norm_u_accum[n] = norm_u_accum[n - 1] + norm_u
+
+            ep_enrg[n] = (ep_enrg[n-1] + ep_enrg_it[i]) / norm_p_accum[n]
+            ep_l2[n] = (ep_l2[n-1] + ep_l2_it[i]) / norm_p_accum[n]
+            eu_enrg[n] = (eu_enrg[n-1] + eu_enrg_it[i]) / norm_u_accum[n]
+            eu_div[n] = (eu_div[n-1] + eu_div_it[i]) / norm_u_accum[n]
+
+            maj_ph[n] = (maj_ph[n-1] + maj_ph_it[i]) / norm_p_accum[n]
+            maj_phl2[n] = (maj_phl2[n-1] + maj_phl2_it[i]) / norm_p_accum[n]
+            maj_uh[n] = (maj_uh[n-1] + maj_uh_it[i]) / norm_u_accum[n]
+            maj_uhdiv[n] = (maj_uhdiv[n-1] + maj_uhdiv_it[i]) / norm_u_accum[n]
+
+            maj_pi[n] = (maj_pi[n-1] + maj_pi_it[i]) / norm_p_accum[n]
+            maj_ui[n] = (maj_ui[n-1] + maj_ui_it[i]) / norm_u_accum[n]
+
+            # Using auxiliary majorant
+            e_p[n] = (e_p[n-1] + ep_enrg_it[i]) / norm_p_accum[n]
+            e_u[n] = (e_u[n-1] + eu_enrg_it[i]) / norm_u_accum[n]
+            e[n] = (e[n-1] + ep_enrg_it[i] + eu_enrg_it[i]) / max([norm_p_accum[n], norm_u_accum[n]])
+
+            maj_p[n] = (maj_p[n-1] + 2 * (maj_pi_it_aux + maj_ph_it[i])) / norm_p_accum[n]
+            maj_u[n] = (maj_u[n-1] + 2 * (maj_ui_it_aux + maj_uh_it[i])) / norm_u_accum[n]
+            maj[n] = (maj[n-1] + 2 * (maj_pi_it_aux + maj_ph_it[i] + maj_ui_it_aux + maj_uh_it[i])) / max([norm_p_accum[n], norm_u_accum[n]])
+
+        print("ep_enrg_it[i] + eu_enrg_it[i] = ", ep_enrg_it[i] + eu_enrg_it[i])
+        print("2 * (maj_pi_it_aux + maj_ph_it[i] + maj_ui_it_aux + maj_uh_it[i]) = ", 2 * (maj_pi_it_aux + maj_ph_it[i] + maj_ui_it_aux + maj_uh_it[i]))
+
+        input("Press")
+        '''
+        return ep_enrg, ep_l2, eu_enrg, eu_div, \
+               maj_ph, maj_phl2, maj_uh, maj_uhdiv, maj_pi, maj_ui, \
+               e, e_p, e_u, \
+               maj_p, maj_u, maj, \
+               norm_p_accum, norm_u_accum
 
     # Function with iterative coupling procedure
     def iterative_coupling(self, n, u, p, v, theta, bc_p, bc_u,
@@ -876,6 +1025,28 @@ class BiotSolvers():
             print("based on q_aux: M^{2,i}(p) = %.4e" % (maj_pi_it_aux / norm_p))
             print("based on q_aux: M^{2,i}(u) = %.4e\n" % (maj_ui_it_aux / norm_u))
 
+            # Scale error and majorant of displacement with tau
+            eu_enrg_it[last_it] = self.test_params["tau"] * eu_enrg_it[last_it]
+            maj_ui_it[last_it] = self.test_params["tau"] * maj_ui_it[last_it]
+            maj_uh_it[last_it] = self.test_params["tau"] * maj_uh_it[last_it]
+            maj_ui_it_aux = self.test_params["tau"] * maj_ui_it_aux
+
+            # Get the value from the last iteration for all the discretisation norms
+            ep_enrg, ep_l2, eu_enrg, eu_div, \
+            maj_ph, maj_phl2, maj_uh, maj_uhdiv, \
+            maj_pi, maj_ui, \
+            e, e_p, e_u, \
+            maj_p, maj_u, maj, \
+            norm_p_accum, norm_u_accum = \
+                self.get_last_iter(n, last_it,
+                                   ep_enrg, ep_l2, eu_enrg, eu_div, maj_ph, maj_phl2, maj_uh, maj_uhdiv, maj_pi, maj_ui,
+                                   ep_enrg_it, ep_l2_it, eu_enrg_it, eu_div_it,
+                                   maj_ph_it, maj_phl2_it, maj_uh_it, maj_uhdiv_it,
+                                   maj_pi_it, maj_ui_it,
+                                   maj_pi_it_aux, maj_ui_it_aux,
+                                   e, e_p, e_u, maj_p, maj_u, maj,
+                                   norm_p, norm_u, norm_p_accum, norm_u_accum)
+        '''
         # Get the value from the last iteration for all the discretisation norms
         ep_enrg, ep_l2, eu_enrg, eu_div, maj_ph, maj_phl2, maj_uh, maj_uhdiv, maj_pi, maj_ui, norm_p_accum, norm_u_accum = \
             self.get_last_iter(n, last_it,
@@ -895,7 +1066,7 @@ class BiotSolvers():
 
             maj_pi[n] = (maj_pi[n - 1] + maj_pi_it_aux) / norm_p_accum[n]
             maj_ui[n] = (maj_ui[n - 1] + maj_ui_it_aux) / norm_u_accum[n]
-
+        '''
         # Print errors and majorants on all time steps
         if test_params["full_documentation"]:
             print("increment on the %dth interval " % (n+1))
@@ -930,6 +1101,24 @@ class BiotSolvers():
                              ep_enrg_it[last_it] + eu_enrg_it[last_it]))))
             print("-------------------------------------------------------------------")
 
+            print("-------------------------------------------------------------------")
+            print("accumulated result of intervals %d-%dth" % (0, n + 1))
+            print("-------------------------------------------------------------------")
+            print("||| e_p |||^2  = %.4e, Mp^2 = %.4e, i_eff(Mp) = %.2f" % (
+                e_p[n] / norm_p_accum[n],
+                maj_p[n] / norm_p_accum[n],
+                sqrt(maj_p[n] / e_p[n])))
+            print("||| e_u |||^2  = %.4e, Mu^2 = %.4e, i_eff(Mu) = %.2f" % (
+                e_u[n] / norm_u_accum[n],
+                maj_u[n] / norm_u_accum[n],
+                sqrt(maj_u[n] / e_u[n])))
+            print("-------------------------------------------------------------------")
+            print("[(e_u, e_p)]^2 = %.4e, M^2  = %.4e, i_eff(M) = %.2f" %
+                  (e[n] / max([norm_p_accum[n], norm_u_accum[n]]),
+                   maj[n] / max([norm_p_accum[n], norm_u_accum[n]]),
+                   sqrt(maj[n] / e[n])))
+            print("-------------------------------------------------------------------")
+        '''
         # Accumulate errors and majorants on all time steps
         e_p[n] = ep_enrg[n]
         e_u[n] = eu_enrg[n]
@@ -949,8 +1138,9 @@ class BiotSolvers():
             print("-------------------------------------------------------------------")
             print("[(e_u, e_p)]^2 = %.4e, M^2  = %.4e, i_eff(M) = %.2f" % (e[n], maj[n], sqrt(maj[n] / e[n])))
             print("-------------------------------------------------------------------")
+        #
+        '''
         #input("Press")
-
         return u_i1, p_i1, \
                ep_enrg, ep_l2, eu_enrg, eu_div, \
                e_p, e_u, e, \
@@ -1362,6 +1552,7 @@ class TestBiot():
 
         # Define the value of the time-step
         tau = float(self.problem_data['t_T'] / test_params['time_steps'])
+        self.test_params['tau'] = tau
 
         # Initialize times
         t_n = 0  # t_n
@@ -1618,15 +1809,19 @@ if __name__ == '__main__':
              103: tests.simple_example_2d_t_bothetall_paper_parameters,
              104: tests.simple_example_2d_t_lubrication_paper_parameters}
     # Set the number of the test and call for the problem data
-    test_num = 104
+    test_num = 4
 
-    #resolutions = [64]
+    #resolutions = [16]
     #resolutions = [32]
+    #resolutions = [64]
     #resolutions = [8, 16, 32, 64]
     #resolutions = [8, 16, 32, 64]
 
     #resolutions = [4, 8, 16, 32, 64]
-    resolutions = [4, 8, 16, 32]
+    #resolutions = [4, 8, 16, 32]
+    #resolutions = [4, 8, 16]
+    #resolutions = [64]
+    #resolutions = [16]
 
     for i in range(0, len(resolutions)):
         # Init problem parameters
@@ -1644,11 +1839,12 @@ if __name__ == '__main__':
                            error_format=relative_error, #absolute_error,
                            error_estimates=True,
                            majorant_optimisation=True,
-                           majorant_optimization_iterations_number=0,
+                           majorant_optimization_iterations_number=3,
                            test_num=test_num,
-                           output=file_output)
+                           output=console_output)
 
         problem_data, domain_params, material_params = tests[test_num]()
 
         test = TestBiot(problem_data, domain_params, material_params, test_params)
         test.test_biot(test_params, project_path)
+        
