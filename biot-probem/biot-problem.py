@@ -58,7 +58,7 @@ class ErrorControl():
         self.VVe = VVe
         self.Qe = Qe
 
-    def error_pressure(self, error_array, errorl2_array, i, p, funcs):
+    def error_pressure(self, error_array, errorl2_array, i, p, norm_p_accum, n, funcs):
         """
         :param p: approximate pressure
         :param pe: exact pressure
@@ -103,9 +103,12 @@ class ErrorControl():
             # print("||| p |||^2    = %.4e" % norm_p)
             # print("|| grad e_p ||^2 = %.4e" % norm_grad_e_p)
 
-        return error_array, errorl2_array, var_grad_e_p, var_e_p, norm_p
+        if n == 0:  norm_p_accum[n] = norm_p
+        else:   norm_p_accum[n] = norm_p_accum[n - 1] + norm_p
 
-    def error_displacement(self, eu_array, eudiv_array, i, u, funcs, mu, lmbda):
+        return error_array, errorl2_array, var_grad_e_p, var_e_p, norm_p, norm_p_accum
+
+    def error_displacement(self, eu_array, eudiv_array, i, u, norm_u_accum, n, funcs, mu, lmbda):
         """
         :param eu_array: array with energy error
         :param eudiv_array: array with div error
@@ -152,7 +155,10 @@ class ErrorControl():
             print("|| div e_p ||^2 = %.4e" % (eudiv_array[i-1] / norm_u))
             # print("||| u |||^2   = %.4e" % norm_u_)
 
-        return eu_array, eudiv_array, var_strain_e_u, var_div_e_u, norm_u
+        if n == 0:  norm_u_accum[n] = norm_u
+        else:   norm_u_accum[n] = norm_u_accum[n - 1] + norm_u
+
+        return eu_array, eudiv_array, var_strain_e_u, var_div_e_u, norm_u, norm_u_accum
 
     # Console output of error and majorant values
     def output_optimization_results(self, iter, maj, m_d, m_f, error, beta, norm_v):
@@ -868,8 +874,8 @@ class BiotSolvers():
             # solve(A_p, p_k1.vector(), b_p, "gmres", "hypre_amg")
 
             # Calculate the error in the pressure term
-            ep_enrg_it, ep_l2_it, var_grad_ep, var_ep, norm_p \
-                = error_control.error_pressure(ep_enrg_it, ep_l2_it, i, p_i1, funcs)
+            ep_enrg_it, ep_l2_it, var_grad_ep, var_ep, norm_p, norm_p_accum \
+                = error_control.error_pressure(ep_enrg_it, ep_l2_it, i, p_i1, norm_p_accum, n, funcs)
 
             # ----------------------------------------------------------------------------------------------#
             # Constructin u (u_{i+1}) using p_{i+1}
@@ -887,8 +893,8 @@ class BiotSolvers():
             # TODO: add the exiting criterion based on the inc_p, inc_u <= 1e-8
 
             # Calculate the error in the displacement term
-            eu_enrg_it, eu_div_it, var_strain_eu, var_div_eu, norm_u \
-                = error_control.error_displacement(eu_enrg_it, eu_div_it, i, u_i1, funcs, mu, lmbda)
+            eu_enrg_it, eu_div_it, var_strain_eu, var_div_eu, norm_u, norm_u_accum \
+                = error_control.error_displacement(eu_enrg_it, eu_div_it, i, u_i1, norm_u_accum, n, funcs, mu, lmbda)
 
             gamma = math.sqrt(2 * L)
             eta_i1 = project(alpha / gamma * div(u_i1) - L / gamma * p_i1, func_spaces["Q"])
@@ -1025,27 +1031,27 @@ class BiotSolvers():
             print("based on q_aux: M^{2,i}(p) = %.4e" % (maj_pi_it_aux / norm_p))
             print("based on q_aux: M^{2,i}(u) = %.4e\n" % (maj_ui_it_aux / norm_u))
 
-            # Scale error and majorant of displacement with tau
-            eu_enrg_it[last_it] = self.test_params["tau"] * eu_enrg_it[last_it]
-            maj_ui_it[last_it] = self.test_params["tau"] * maj_ui_it[last_it]
-            maj_uh_it[last_it] = self.test_params["tau"] * maj_uh_it[last_it]
-            maj_ui_it_aux = self.test_params["tau"] * maj_ui_it_aux
+        # Scale error and majorant of displacement with tau
+        eu_enrg_it[last_it] = self.test_params["tau"] * eu_enrg_it[last_it]
+        maj_ui_it[last_it] = self.test_params["tau"] * maj_ui_it[last_it]
+        maj_uh_it[last_it] = self.test_params["tau"] * maj_uh_it[last_it]
+        maj_ui_it_aux = self.test_params["tau"] * maj_ui_it_aux
 
-            # Get the value from the last iteration for all the discretisation norms
-            ep_enrg, ep_l2, eu_enrg, eu_div, \
-            maj_ph, maj_phl2, maj_uh, maj_uhdiv, \
-            maj_pi, maj_ui, \
-            e, e_p, e_u, \
-            maj_p, maj_u, maj, \
-            norm_p_accum, norm_u_accum = \
-                self.get_last_iter(n, last_it,
-                                   ep_enrg, ep_l2, eu_enrg, eu_div, maj_ph, maj_phl2, maj_uh, maj_uhdiv, maj_pi, maj_ui,
-                                   ep_enrg_it, ep_l2_it, eu_enrg_it, eu_div_it,
-                                   maj_ph_it, maj_phl2_it, maj_uh_it, maj_uhdiv_it,
-                                   maj_pi_it, maj_ui_it,
-                                   maj_pi_it_aux, maj_ui_it_aux,
-                                   e, e_p, e_u, maj_p, maj_u, maj,
-                                   norm_p, norm_u, norm_p_accum, norm_u_accum)
+        # Get the value from the last iteration for all the discretisation norms
+        ep_enrg, ep_l2, eu_enrg, eu_div, \
+        maj_ph, maj_phl2, maj_uh, maj_uhdiv, \
+        maj_pi, maj_ui, \
+        e, e_p, e_u, \
+        maj_p, maj_u, maj, \
+        norm_p_accum, norm_u_accum = \
+            self.get_last_iter(n, last_it,
+                               ep_enrg, ep_l2, eu_enrg, eu_div, maj_ph, maj_phl2, maj_uh, maj_uhdiv, maj_pi, maj_ui,
+                               ep_enrg_it, ep_l2_it, eu_enrg_it, eu_div_it,
+                               maj_ph_it, maj_phl2_it, maj_uh_it, maj_uhdiv_it,
+                               maj_pi_it, maj_ui_it,
+                               maj_pi_it_aux, maj_ui_it_aux,
+                               e, e_p, e_u, maj_p, maj_u, maj,
+                               norm_p, norm_u, norm_p_accum, norm_u_accum)
         '''
         # Get the value from the last iteration for all the discretisation norms
         ep_enrg, ep_l2, eu_enrg, eu_div, maj_ph, maj_phl2, maj_uh, maj_uhdiv, maj_pi, maj_ui, norm_p_accum, norm_u_accum = \
@@ -1069,6 +1075,7 @@ class BiotSolvers():
         '''
         # Print errors and majorants on all time steps
         if test_params["full_documentation"]:
+            '''
             print("increment on the %dth interval " % (n+1))
             print("-------------------------------------------------------------------")
             print("||| e_p |||^2  = %.4e, Mp^2  = %.4e, i_eff(Mp)  = %.2f" % (
@@ -1102,14 +1109,15 @@ class BiotSolvers():
                              ep_enrg_it[last_it] + eu_enrg_it[last_it]))))
             print("-------------------------------------------------------------------")
             '''
+
             print("increment on the %dth interval " % (n+1))
             print("-------------------------------------------------------------------")
             print("||| e_p |||^2  = %.4e, Mp^2  = %.4e, i_eff(Mp)  = %.2f" % (
-                  ep_enrg_it[last_it] / norm_p_accum[n], 
+                  ep_enrg_it[last_it] / norm_p_accum[n],
                   2 * (maj_pi_it[last_it] + maj_ph_it[last_it]) / norm_p_accum[n],
                   sqrt((2 * (maj_pi_it[last_it] + maj_ph_it[last_it])) / ep_enrg_it[last_it])))
             print("||| e_u |||^2  = %.4e, Mu^2  = %.4e, i_eff(Mu)  = %.2f" % (
-                  eu_enrg_it[last_it] / norm_u_accum[n], 
+                  eu_enrg_it[last_it] / norm_u_accum[n],
                   2 * (maj_ui_it[last_it] + maj_uh_it[last_it]) / norm_u_accum[n],
                   sqrt((2 * (maj_ui_it[last_it] + maj_uh_it[last_it])) / eu_enrg_it[last_it])))
             print("-------------------------------------------------------------------")
@@ -1136,7 +1144,7 @@ class BiotSolvers():
                      sqrt(2 * (maj_pi_it_aux + maj_ph_it[last_it] + maj_ui_it_aux + maj_uh_it[last_it]) / (
                              ep_enrg_it[last_it] + eu_enrg_it[last_it]))))
             print("-------------------------------------------------------------------")
-            '''
+
             print("-------------------------------------------------------------------")
             print("accumulated result of intervals %d-%dth" % (0, n + 1))
             print("-------------------------------------------------------------------")
@@ -1527,7 +1535,7 @@ class TestBiot():
         # Set start time
         t0_problem = process_time()
         # Solve Biot system
-        error_p, errpr_pl2, error_u, error_udiv, e_p, e_u, e_enrg, maj_p, maj_u, maj \
+        error_p, errpr_pl2, error_u, error_udiv, e_p, e_u, e_enrg, maj_p, maj_u, maj, norm_p, norm_u \
             = self.solve_biot(func_spaces, funcs, facet_function, mesh,
                               test_params, project_path, resultfolder_name)
         '''
@@ -1542,10 +1550,25 @@ class TestBiot():
         print('\t\th\t||| e_p |||^2\t\t\tMp^2\t||| e_u |||^2\t\t\tMu^2\t[(e_u, e_p)]^2\t M^2\t i_eff')
         print('%4.4e &\t %12.4e &\t %12.4e &\t %12.4e &\t %12.4e &\t %12.4e &\t%12.4e &\t%5.2f\n'
               % (h,
-                 e_p[test_params["time_steps"] - 1], maj_p[test_params["time_steps"] - 1],
-                 e_u[test_params["time_steps"] - 1], maj_u[test_params["time_steps"] - 1],
-                 e_enrg[test_params["time_steps"] - 1], maj[test_params["time_steps"] - 1],
+                 e_p[-1] / norm_p[-1],
+                 maj_p[-1] / norm_p[-1],
+                 e_u[-1] / norm_u[-1],
+                 maj_u[-1] / norm_u[-1],
+                 e_enrg[-1] / max([norm_p[-1], norm_u[-1]]),
+                 maj[-1] / max([norm_p[-1], norm_u[-1]]),
                  sqrt(maj[test_params["time_steps"] - 1] / e_enrg[test_params["time_steps"] - 1])))
+        '''
+        print('%4.4e &\t %12.4e &\t %12.4e &\t %12.4e &\t %12.4e &\t %12.4e &\t%12.4e &\t%5.2f\n'
+              % (h,
+                 e_p[test_params["time_steps"] - 1],
+                 maj_p[test_params["time_steps"] - 1],
+                 e_u[test_params["time_steps"] - 1],
+                 maj_u[test_params["time_steps"] - 1],
+                 e_enrg[test_params["time_steps"] - 1],
+                 maj[test_params["time_steps"] - 1],
+                 sqrt(maj[test_params["time_steps"] - 1] / e_enrg[test_params["time_steps"] - 1])))
+    
+        '''
         '''
         print('\th\t||| e_p |||^2\t|| e_p ||^2\t||| e_u |||^2\t|| div(u) ||^2\t\t\tMp^2\t\t\tMu^2\ti_eff')
         print('%4.4e\t %12.4e\t %10.4e\t %12.4e\t %13.4e %13.4e\t %11.4e\t%5.2f\n'
@@ -1761,7 +1784,7 @@ class TestBiot():
                                                        test_params["iter_num"])
             '''
         return ep_enrg, ep_l2, eu_enrg, eu_div, ep, eu, e, \
-               maj_p, maj_u, maj
+               maj_p, maj_u, maj, norm_p_accum, norm_u_accum
 
     def dirichlet_boundary_conditions(self, func_spaces, funcs, facet_function, material_params):
 
@@ -1867,7 +1890,7 @@ if __name__ == '__main__':
                            flux_approx_order=2,
                            stress_approx_order=2,
                            iter_accuracy=1e-4,  # Required accuracy at each interation cycle
-                           time_steps=100,  # Number of time steps on the interval [0, t_T]
+                           time_steps=10,  # Number of time steps on the interval [0, t_T]
                            mesh_resolution=resolutions[i],  # Lever of refinement of initial mesh [4, 8, 16, 32, 64, 128]
                            iter_num=5,
                            coupling_approach=iterative_coupling,
