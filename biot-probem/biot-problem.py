@@ -1815,12 +1815,13 @@ if __name__ == '__main__':
     #resolutions = [16]
     #resolutions = [32]
     #resolutions = [64]
+    #resolutions = [4]
     #resolutions = [8, 16, 32, 64]
     #resolutions = [8, 16, 32, 64]
 
     #resolutions = [4, 8, 16, 32, 64]
-    #resolutions = [4, 8, 16, 32]
-    #resolutions = [4, 8, 16]
+    resolutions = [4, 8, 16, 32]
+    #resolutions = [16, 32, 64]
     #resolutions = [64]
     #resolutions = [16]
 
@@ -1831,18 +1832,18 @@ if __name__ == '__main__':
                            flux_approx_order=2,
                            stress_approx_order=2,
                            iter_accuracy=1e-4,  # Required accuracy at each interation cycle
-                           time_steps=10,  # Number of time steps on the interval [0, t_T]
+                           time_steps=100,  # Number of time steps on the interval [0, t_T]
                            mesh_resolution=resolutions[i],  # Lever of refinement of initial mesh [4, 8, 16, 32, 64, 128]
                            iter_num=5,
                            coupling_approach=iterative_coupling,
                            pressure_recovery_method=CG_method,
                            full_documentation=True,
-                           error_format=relative_error, #absolute_error,
+                           error_format=absolute_error, #relative_error,
                            error_estimates=True,
                            majorant_optimisation=True,
                            majorant_optimization_iterations_number=3,
                            test_num=test_num,
-                           output=console_output)
+                           output=file_output)
 
         problem_data, domain_params, material_params = tests[test_num]()
 
