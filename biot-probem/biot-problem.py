@@ -1091,12 +1091,13 @@ class BiotSolvers():
                 2 * (maj_pi_it_aux + maj_ph_it[last_it]) / norm_p,
                 sqrt((2 * (maj_pi_it_aux + maj_ph_it[last_it])) / ep_enrg_it[last_it])))
             print("||| e_u |||^2  = %.4e, Mu^2  = %.4e, i_eff(Mu)  = %.2f" % (
-                eu_enrg_it[last_it] / norm_u, 2 * (maj_ui_it_aux + maj_uh_it[last_it]) / norm_u,
+                eu_enrg_it[last_it] / norm_u,
+                2 * (maj_ui_it_aux + maj_uh_it[last_it]) / norm_u,
                 sqrt((2 * (maj_ui_it_aux + maj_uh_it[last_it])) / eu_enrg_it[last_it])))
             print("-------------------------------------------------------------------")
             print("[(e_u, e_p)]^2 = %.4e, Mit^2 = %.4e, i_eff(Mit) = %.2f"
                       % ((ep_enrg_it[last_it] + eu_enrg_it[last_it]) / max([norm_p, norm_u]),
-                         2 * (maj_pi_it[last_it] + maj_ph_it[last_it] + maj_ui_it[last_it] + maj_uh_it[last_it]) / max([norm_p, norm_u]),
+                         2 * (maj_pi_it_aux + maj_ph_it[last_it] + maj_ui_it_aux + maj_uh_it[last_it]) / max([norm_p, norm_u]),
                      sqrt(2 * (maj_pi_it_aux + maj_ph_it[last_it] + maj_ui_it_aux + maj_uh_it[last_it]) / (
                              ep_enrg_it[last_it] + eu_enrg_it[last_it]))))
             print("-------------------------------------------------------------------")
