@@ -15,9 +15,6 @@ import tests, problem, postprocess
 
 # https://fenicsproject.org/olddocs/dolfin/1.3.0/python/programmers-reference/fem/solving/solve.html
 # https://fenicsproject.org/pub/tutorial/sphinx1/._ftut1006.html#ftut-app-solver-prec
-# solve(A1, u1.vector(), b1, ’bicgstab’, ’hypre_amg’)
-# solve(A2, p1.vector(), b2, ’bicgstab’, ’hypre_amg’)
-# solve(A3, u1.vector(), b3, ’cg’, ’sor’)
 
 parameters['form_compiler']['optimize'] = True
 parameters['form_compiler']['cpp_optimize'] = True
@@ -900,7 +897,7 @@ class BiotSolvers():
             eta_i1 = project(alpha / gamma * div(u_i1) - L / gamma * p_i1, func_spaces["Q"])
             eta_i = project(alpha / gamma * div(u_i) - L / gamma * p_i, func_spaces["Q"])
 
-            pow = 3
+            pow = 5
             aux_it = test_params["iter_num"] - pow
 
             if i == aux_it:
@@ -1122,8 +1119,8 @@ class BiotSolvers():
                   sqrt((2 * (maj_ui_it[last_it] + maj_uh_it[last_it])) / eu_enrg_it[last_it])))
             print("-------------------------------------------------------------------")
             print("[(e_u, e_p)]^2 = %.4e, Mit^2 = %.4e, i_eff(Mit) = %.2f"
-                  % (ep_enrg_it[last_it] + eu_enrg_it[last_it] / max([norm_p, norm_u]),
-                     2 * (maj_pi_it[last_it] + maj_ph_it[last_it] + maj_ui_it[last_it] + maj_uh_it[last_it]) / max([norm_p, norm_u]),
+                  % (ep_enrg_it[last_it] + eu_enrg_it[last_it] / max([norm_p_accum[n], norm_u_accum[n]]),
+                     2 * (maj_pi_it[last_it] + maj_ph_it[last_it] + maj_ui_it[last_it] + maj_uh_it[last_it]) / max([norm_p_accum[n], norm_u_accum[n]]),
                      sqrt(2 * (maj_pi_it[last_it] + maj_ph_it[last_it] + maj_ui_it[last_it] + maj_uh_it[last_it]) / (ep_enrg_it[last_it] + eu_enrg_it[last_it]))))
             print("-------------------------------------------------------------------")
 
@@ -1139,7 +1136,7 @@ class BiotSolvers():
                 sqrt((2 * (maj_ui_it_aux + maj_uh_it[last_it])) / eu_enrg_it[last_it])))
             print("-------------------------------------------------------------------")
             print("[(e_u, e_p)]^2 = %.4e, Mit^2 = %.4e, i_eff(Mit) = %.2f"
-                      % ((ep_enrg_it[last_it] + eu_enrg_it[last_it]) / max([norm_p_accum[n], norm_u]),
+                      % ((ep_enrg_it[last_it] + eu_enrg_it[last_it]) / max([norm_p_accum[n], norm_u_accum[n]]),
                          2 * (maj_pi_it_aux + maj_ph_it[last_it] + maj_ui_it_aux + maj_uh_it[last_it]) / max([norm_p_accum[n], norm_u_accum[n]]),
                      sqrt(2 * (maj_pi_it_aux + maj_ph_it[last_it] + maj_ui_it_aux + maj_uh_it[last_it]) / (
                              ep_enrg_it[last_it] + eu_enrg_it[last_it]))))
@@ -1535,7 +1532,7 @@ class TestBiot():
         # Set start time
         t0_problem = process_time()
         # Solve Biot system
-        error_p, errpr_pl2, error_u, error_udiv, e_p, e_u, e_enrg, maj_p, maj_u, maj, norm_p, norm_u \
+        error_p, errpr_pl2, error_u, error_udiv, e_p, e_u, e_enrg, maj_p, maj_u, maj, accum_norm_p, accum_norm_u \
             = self.solve_biot(func_spaces, funcs, facet_function, mesh,
                               test_params, project_path, resultfolder_name)
         '''
@@ -1550,12 +1547,12 @@ class TestBiot():
         print('\t\th\t||| e_p |||^2\t\t\tMp^2\t||| e_u |||^2\t\t\tMu^2\t[(e_u, e_p)]^2\t M^2\t i_eff')
         print('%4.4e &\t %12.4e &\t %12.4e &\t %12.4e &\t %12.4e &\t %12.4e &\t%12.4e &\t%5.2f\n'
               % (h,
-                 e_p[-1] / norm_p[-1],
-                 maj_p[-1] / norm_p[-1],
-                 e_u[-1] / norm_u[-1],
-                 maj_u[-1] / norm_u[-1],
-                 e_enrg[-1] / max([norm_p[-1], norm_u[-1]]),
-                 maj[-1] / max([norm_p[-1], norm_u[-1]]),
+                 e_p[-1] / accum_norm_p[-1],
+                 maj_p[-1] / accum_norm_p[-1],
+                 e_u[-1] / accum_norm_u[-1],
+                 maj_u[-1] / accum_norm_u[-1],
+                 e_enrg[-1] / max([accum_norm_p[-1], accum_norm_u[-1]]),
+                 maj[-1] / max([accum_norm_p[-1], accum_norm_u[-1]]),
                  sqrt(maj[test_params["time_steps"] - 1] / e_enrg[test_params["time_steps"] - 1])))
         '''
         print('%4.4e &\t %12.4e &\t %12.4e &\t %12.4e &\t %12.4e &\t %12.4e &\t%12.4e &\t%5.2f\n'
@@ -1878,7 +1875,7 @@ if __name__ == '__main__':
     #resolutions = [8, 16, 32, 64]
 
     #resolutions = [4, 8, 16, 32, 64]
-    resolutions = [4, 8, 16, 32]
+    resolutions = [4, 8, 16, 32, 64]
     #resolutions = [16, 32, 64]
     #resolutions = [64]
     #resolutions = [16]
@@ -1890,9 +1887,9 @@ if __name__ == '__main__':
                            flux_approx_order=2,
                            stress_approx_order=2,
                            iter_accuracy=1e-4,  # Required accuracy at each interation cycle
-                           time_steps=10,  # Number of time steps on the interval [0, t_T]
+                           time_steps=100,  # Number of time steps on the interval [0, t_T]
                            mesh_resolution=resolutions[i],  # Lever of refinement of initial mesh [4, 8, 16, 32, 64, 128]
-                           iter_num=5,
+                           iter_num=7,
                            coupling_approach=iterative_coupling,
                            pressure_recovery_method=CG_method,
                            full_documentation=True,
