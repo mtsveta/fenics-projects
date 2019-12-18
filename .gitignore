@@ -1,0 +1,8 @@
+.idea/
+
+# Folders with results
+out/
+out-new-normalization/
+out-new-new-normalization/
+out-absolute-error/
+out-before-fix/
