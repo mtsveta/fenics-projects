@@ -462,16 +462,16 @@ def simple_example_2d_t_lubrication_paper_parameters():
     #mu_f = 1                   # fluid viscosity
 
     # set 2
-    #k11 = 50.0 * 1e-6
-    #k22 = 200.0 * 1e-6
-    #min_eig_kappa = 50.0 * 1e-6
-    #mu_f = 1e-3
+    k11 = 50.0 * 1e-6
+    k22 = 200.0 * 1e-6
+    min_eig_kappa = 50.0 * 1e-6
+    mu_f = 1e-3
 
     # set 3
-    k11 = 50.0 * 1e-10
-    k22 = 200.0 * 1e-10
-    min_eig_kappa = 50.0 * 1e-10
-    mu_f = 1e-3
+    #k11 = 50.0 * 1e-10
+    #k22 = 200.0 * 1e-10
+    #min_eig_kappa = 50.0 * 1e-10
+    #mu_f = 1e-3
 
     # set 4
     #k11 = 50.0 * 1e-15

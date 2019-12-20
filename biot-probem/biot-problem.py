@@ -694,8 +694,8 @@ class BiotSolvers():
             maj_ui[n] = maj_ui_it_aux
 
             # Correction of the maj_pi and maj_ui by maj_tilde_pi and maj_tilde_ui
-            maj_pi[n] = maj_tilde_pi_it[i]
-            maj_ui[n] = maj_tilde_ui_it[i]
+            # maj_pi[n] = maj_tilde_pi_it[i]
+            # maj_ui[n] = maj_tilde_ui_it[i]
 
             # Using auxiliary majorant
             e_p[n] = ep_enrg_it[i]
@@ -1180,7 +1180,7 @@ class BiotSolvers():
                              ep_enrg_it[last_it] + eu_enrg_it[last_it]))))
             print("-------------------------------------------------------------------")
 
-            print("improved increment with tilde majorant) on the %dth interval" % (n + 1))
+            print("improved increment (with tilde majorant) on the %dth interval" % (n + 1))
             print("-------------------------------------------------------------------")
             print("||| e_p |||^2  = %.4e, Mp^2  = %.4e, i_eff(Mp)  = %.2f" % (
                 ep_enrg_it[last_it] / norm_p_accum[n],
@@ -1926,19 +1926,19 @@ if __name__ == '__main__':
     # Set the number of the test and call for the problem data
     #test_num = 102
     #test_num = 2
-    #test_num = 104
-    test_num = 4
+    test_num = 104
+    #test_num = 102
 
     #resolutions = [16]
     #resolutions = [64]
-    resolutions = [32]
+    #resolutions = [32]
     #resolutions = [64]
     #resolutions = [4]
     #resolutions = [8]
     #resolutions = [8, 16, 32, 64]
     #resolutions = [8, 16, 32, 64]
 
-    #resolutions = [4, 8, 16, 32, 64]
+    resolutions = [4, 8, 16, 32, 64]
     #resolutions = [4, 8, 16, 32, 64]
     #resolutions = [16, 32, 64]
     #resolutions = [64]
@@ -1951,10 +1951,10 @@ if __name__ == '__main__':
                            flux_approx_order=2,
                            stress_approx_order=2,
                            iter_accuracy=1e-4,  # Required accuracy at each interation cycle
-                           time_steps=1000,  # Number of time steps on the interval [0, t_T]
+                           time_steps=100,  # Number of time steps on the interval [0, t_T]
                            mesh_resolution=resolutions[i],  # Lever of refinement of initial mesh [4, 8, 16, 32, 64, 128]
-                           iter_num=7,
-                           pow=5,
+                           iter_num=5,
+                           pow=3,
                            coupling_approach=iterative_coupling,
                            pressure_recovery_method=CG_method,
                            full_documentation=True,
