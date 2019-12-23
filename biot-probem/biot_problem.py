@@ -18,6 +18,11 @@ import tests, problem, postprocess
 
 parameters['form_compiler']['optimize'] = True
 parameters['form_compiler']['cpp_optimize'] = True
+# solve(A1, u1.vector(), b1, ’bicgstab’, ’hypre_amg’)(
+# solve(A2, p1.vector(), b2, ’bicgstab’, ’hypre_amg’)
+# solve(A3, u1.vector(), b3, ’cg’, ’sor’)
+
+deg = 3
 
 # print(parameters.linear_algebra_backend)
 # list_linear_solver_methods()
@@ -437,7 +442,7 @@ class ErrorControl():
                 # Define the optimal system for the flux reconstruction
                 yMatrix = C_FD ** 2 / funcs["min_eig_kappa"] * S + beta * K
                 yRhs = C_FD ** 2 / funcs["min_eig_kappa"] * z + beta * g
-                solve(yMatrix, Y, yRhs)
+                solve(yMatrix, Y, yRhs, solver_parameters={'linear_solver' : 'mumps'})
                 y.vector = Y
                 maj, m_d, m_f, beta, var_m_d, var_m_f_w_opt = \
                     self.calculate_majorant_bar_mu_opt(p, y, beta, C_FD,
@@ -489,7 +494,7 @@ class ErrorControl():
                 # Define the optimal system for the flux reconstruction
                 yMatrix = C_FD ** 2 / funcs["min_eig_kappa"] * S + beta * K
                 yRhs = C_FD ** 2 / funcs["min_eig_kappa"] * z + beta * g
-                solve(yMatrix, Y, yRhs)
+                solve(yMatrix, Y, yRhs,  solver_parameters={'linear_solver' : 'mumps'})
                 y.vector = Y
                 maj, m_d, m_f, beta, var_m_d, var_m_f_w_opt = \
                     self.calculate_majorant_bar_mu_opt(p, y, beta, C_FD, f, funcs["kappa"], funcs["min_eig_kappa"], funcs["react"])
@@ -501,11 +506,7 @@ class ErrorControl():
 
         return maj_d, maj_eq, var_m_d
 
-    def majorant_displacement(self, maj_eu_array, eu_array,
-                              k, u, F, mu, lmbda,
-                              domain_params, test_params,
-                              func_spaces,
-                              u_e, norm_u):
+    def majorant_displacement(self, maj_eu_array, eu_array, k, u, F, mu, lmbda, domain_params, test_params, func_spaces, u_e, norm_u):
 
         C_K = math.sqrt(2) * domain_params["C_FD"] / sqrt(2 * mu)
         beta = 1.0
@@ -514,8 +515,16 @@ class ErrorControl():
         # y = project(sigma(u, mu, lmbda, self.gdim), func_spaces["H_Div"])
         epsilon = lambda v: 0.5 * (nabla_grad(v) + nabla_grad(v).T)
         sigma = lambda v: 2 * mu * epsilon(v) + lmbda * div(v) * Identity(self.gdim)
-        y = project(sigma(interpolate(u_e, self.VVe)), func_spaces["H_Div"])
+        #y = project(sigma(interpolate(u_e, self.VVe)), func_spaces["H_Div"])
 
+        #'''
+        # Define test functions for mechanics and flow equations
+        tau_test = TestFunction(func_spaces['H_Div'])
+        y_trial = TrialFunction(func_spaces['H_Div'])
+        a_project = assemble(inner(y_trial, tau_test) * dx)
+        l_project = assemble(inner(sigma(interpolate(u_e, self.VVe)), tau_test) * dx)
+        solve(a_project, y.vector(), l_project, solver_parameters={'linear_solver': 'mumps'})
+        #'''
         # beta is the reaction fucntion
         maj, m_d, m_f, beta, var_m_d, var_m_f = \
             self.calculate_majorant(u, y, F, mu, lmbda, C_K, beta)
@@ -542,7 +551,7 @@ class ErrorControl():
                 yMatrix = C_K ** 2 * S + beta * K
                 yRhs = C_K ** 2 * z + beta * g
 
-                solve(yMatrix, Y, yRhs)
+                solve(yMatrix, Y, yRhs,  solver_parameters={'linear_solver' : 'mumps'})
                 y.vector = Y
 
                 # Calculate majorant
@@ -557,10 +566,7 @@ class ErrorControl():
 
         return maj_eu_array
 
-    def majorant_displacement_part(self, n, maj_d, maj_eq,
-                                  u, F, mu, lmbda,
-                                  domain_params, test_params,
-                                  func_spaces, funcs):
+    def majorant_displacement_part(self, n, maj_d, maj_eq, u, F, mu, lmbda, domain_params, test_params, func_spaces, funcs):
 
         C_K = math.sqrt(2) * domain_params["C_FD"] / sqrt(2 * mu)
         beta = 1.0
@@ -596,7 +602,7 @@ class ErrorControl():
                 yMatrix = C_K ** 2 * S + beta * K
                 yRhs = C_K ** 2 * z + beta * g
 
-                solve(yMatrix, Y, yRhs)
+                solve(yMatrix, Y, yRhs,  solver_parameters={'linear_solver' : 'mumps'})
                 y.vector = Y
 
                 # Calculate majorant
@@ -889,7 +895,7 @@ class BiotSolvers():
 
             # Assemble the system to solve flow equation for pressure
             A_p, b_p = assemble_system(a_p_var, l_p_var, bc_p)
-            solve(A_p, p_i1.vector(), b_p)
+            solve(A_p, p_i1.vector(), b_p,  solver_parameters={'linear_solver' : 'mumps'})
             # solve(A_p, p_k1.vector(), b_p, "gmres", "hypre_amg")
 
             # Calculate the error in the pressure term
@@ -906,7 +912,7 @@ class BiotSolvers():
 
             # Assemble the system to solve mechanics equation for displacement
             A_u, b_u = assemble_system(a_u_var, l_u_var, bc_u)
-            solve(A_u, u_i1.vector(), b_u)
+            solve(A_u, u_i1.vector(), b_u,  solver_parameters={'linear_solver' : 'mumps'})
 
             # TODO: add here print out of inc_p = || p^{k+1} - p^k ||_l2 and inc_u = || u^{k+1} - u^k ||_l2
             # TODO: add the exiting criterion based on the inc_p, inc_u <= 1e-8
@@ -986,6 +992,7 @@ class BiotSolvers():
                     maj_tilde_base = q**(2 * (test_params["iter_num"] - 1)) * ((q**2 + 1) * incr_sigma_0_norm + norm_diff_eta_0)
 
                     print("\| eta_i1 - eta_i \|  = %.4e" % (incr_sigma_norm))
+                    print("\| eta_1 - eta_0 \|  = %.4e" % (incr_sigma_0_norm))
                     print("3 * q / (1 - q)**2 * (C_FD ** 2 * beta / min_eig_kappa + 1) = %.4e, " %
                           (3 * q / (1 - q) ** 2 * (C_FD ** 2 * funcs["beta"] / funcs["min_eig_kappa"] + 1)))
                     #print("where")
@@ -993,8 +1000,8 @@ class BiotSolvers():
                     #      ((C_FD ** 2 * funcs["beta"] / funcs["min_eig_kappa"] + 1)))
                     #print("3 * q / (1 - q)**2 = %.4e" %
                     #      (3 * q / (1 - q) ** 2))
-                    #print("3 * q**2 / (1 - q)**2 * (1 + gdim * lmbda / (2 * mu)) = %.4e" %
-                    #      (3 * q ** 2 / (1 - q) ** 2 * (1 + gdim * lmbda / (2 * mu))))
+                    print("3 * q**2 / (1 - q)**2 * (1 + gdim * lmbda / (2 * mu)) = %.4e" %
+                          (3 * q ** 2 / (1 - q) ** 2 * (1 + gdim * lmbda / (2 * mu))))
                     print("maj(i, i-1) = %.4e\n " % maj_base)
                     print("maj_tilde_base = %.4e\n " % maj_tilde_base)
 
@@ -1281,7 +1288,7 @@ class BiotSolvers():
         biot_rhs = (inner(funcs["f"], v) + inner(g_tilde, theta)) * dx
 
         # Solve the Biot system
-        solve(biot_lhs == biot_rhs, w_n1, bcs)
+        solve(biot_lhs == biot_rhs, w_n1, bcs, solver_parameters={'linear_solver' : 'mumps'})
         u_n1, p_n1 = w_n1.split()
 
         # Calculate the error in the pressure term
@@ -1344,7 +1351,7 @@ class TestBiot():
 
         # Assemble the system for the initial pressure
         A_p0, b_p0 = assemble_system(a_p0, l_p0, bc_p)
-        solve(A_p0, p_k.vector(), b_p0)
+        solve(A_p0, p_k.vector(), b_p0,  solver_parameters={'linear_solver' : 'mumps'})
 
         epsilon = lambda v: 0.5 * (nabla_grad(v) + nabla_grad(v).T)
         sigma = lambda v: 2 * mu * epsilon(v) + lmbda * div(v) * Identity(self.self.domain_params['gdim'])
@@ -1355,7 +1362,7 @@ class TestBiot():
 
         # Assemble the system for initial displacement
         A_u0, b_u0 = assemble_system(a_u0, l_u0, bc_u)
-        solve(A_u0, u_k.vector(), b_u0)
+        solve(A_u0, u_k.vector(), b_u0,  solver_parameters={'linear_solver' : 'mumps'})
 
         return p_k, u_k
 
@@ -1363,8 +1370,8 @@ class TestBiot():
     def functional_spaces(self, mesh, test_params):
 
         # Order of the space of the exact solutions
-        v_exact_degree = test_params['u_approx_order'] + 2
-        p_exact_degree = test_params['p_approx_order'] + 2
+        v_exact_degree = test_params['u_approx_order'] + 1
+        p_exact_degree = test_params['p_approx_order'] + 1
 
         # Space for the displacement
         V       = VectorFunctionSpace(mesh, "CG", test_params['u_approx_order'])
@@ -1428,15 +1435,15 @@ class TestBiot():
                              alpha_5=self.material_params['alpha_n'][4],
                              c_f=self.material_params['c_f'],
                              t=0.0,
-                             degree=4,
+                             degree=deg,
                              element=func_spaces["Q_exact"].ufl_element())
             # Initial condition for pressure
             p_0 = p_e
             # Dirichlet BC for pressure
             # p_D = Expression(self.problem_data['pD_expr'])
             # Flow source/sink
-            g = Expression(self.problem_data['g_expr'], degree=4)
-            f = Expression((self.problem_data['f_expr'][0], self.problem_data['f_expr'][1]), degree=4)
+            g = Expression(self.problem_data['g_expr'], degree=deg)
+            f = Expression((self.problem_data['f_expr'][0], self.problem_data['f_expr'][1]), degree=deg)
             u_e = Expression((self.problem_data['u_expr'][0], self.problem_data['u_expr'][1]),
                              F=self.material_params['F'],
                              nu_u=self.material_params['nu_u'],
@@ -1450,7 +1457,7 @@ class TestBiot():
                              alpha_5=self.material_params['alpha_n'][4],
                              c_f=self.material_params['c_f'],
                              t=0.0,
-                             degree=4)
+                             degree=deg)
             u_e_0 = Expression(self.problem_data['u_expr'][0],
                                F=self.material_params['F'],
                                nu_u=self.material_params['nu_u'],
@@ -1464,7 +1471,7 @@ class TestBiot():
                                alpha_5=self.material_params['alpha_n'][4],
                                c_f=self.material_params['c_f'],
                                t=0.0,
-                               degree=4)
+                               degree=deg)
             u_e_1 = Expression(self.problem_data['u_expr'][1],
                                F=self.material_params['F'],
                                nu_u=self.material_params['nu_u'],
@@ -1477,10 +1484,10 @@ class TestBiot():
                                alpha_4=self.material_params['alpha_n'][3],
                                alpha_5=self.material_params['alpha_n'][4],
                                c_f=self.material_params['c_f'],
-                               t=0.0, degree=4)
+                               t=0.0, degree=deg)
             t_N = Expression((self.problem_data['t_N_expr'][0],
                               self.problem_data['t_N_expr'][1]),
-                              F=self.material_params['F'], degree=4)
+                              F=self.material_params['F'], degree=deg)
             u_0 = u_e
 
             funcs = dict(u_e=u_e,
@@ -1500,26 +1507,26 @@ class TestBiot():
                 self.test_params['test_num'] == 103 or \
                 self.test_params['test_num'] == 104:
             # Exact pressure and displacement
-            p_e = Expression(self.problem_data['p_expr'], t=0.0, degree=4)
-            u_e = Expression((self.problem_data['u_expr'][0], self.problem_data['u_expr'][1]), t=0, degree=4)
+            p_e = Expression(self.problem_data['p_expr'], t=0.0, degree=deg)
+            u_e = Expression((self.problem_data['u_expr'][0], self.problem_data['u_expr'][1]), t=0, degree=deg)
 
             # Initial condition for pressure and displacement
-            p_0 = Expression(self.problem_data['p0_expr'],degree=4)
-            u_0 = Expression((self.problem_data['u0_expr'][0], self.problem_data['u0_expr'][1]), degree=4)
+            p_0 = Expression(self.problem_data['p0_expr'],degree=deg)
+            u_0 = Expression((self.problem_data['u0_expr'][0], self.problem_data['u0_expr'][1]), degree=deg)
 
             # Flow source/sink
             g = Expression(self.problem_data['g_expr'],
                            beta=self.material_params['beta'],
                            alpha=self.material_params['alpha'],
-                           t=0.0, degree=4)
+                           t=0.0, degree=deg)
 
             # Mechanical load
             f = Expression((self.problem_data['f_expr'][0], self.problem_data['f_expr'][1]),
                            mu=self.material_params['mu'],
                            lmbda=self.material_params['lmbda'],
                            alpha=self.material_params['alpha'],
-                           t=0.0, degree=4)
-            t_N = Expression((self.problem_data['t_N_expr'][0], self.problem_data['t_N_expr'][1]), degree=4)
+                           t=0.0, degree=deg)
+            t_N = Expression((self.problem_data['t_N_expr'][0], self.problem_data['t_N_expr'][1]), degree=deg)
 
             funcs = dict(u_e=u_e,
                          p_e=p_e,
@@ -1531,21 +1538,54 @@ class TestBiot():
 
         elif self.test_params['test_num'] == 3:
             # Dirichlet boundary conditions for pressure
-            p_D_gamma1 = Expression(self.problem_data['p_D_expr'][0], t=0.0, degree=4)
-            p_D_gamma = Expression(self.problem_data['p_D_expr'][1], degree=4)
+            p_D_gamma1 = Expression(self.problem_data['p_D_expr'][0], t=0.0, degree=deg)
+            p_D_gamma = Expression(self.problem_data['p_D_expr'][1], degree=deg)
 
             # Initial condition for pressure
-            p_0 = Expression(self.problem_data['p0_expr'], degree=4)
+            p_0 = Expression(self.problem_data['p0_expr'], degree=deg)
 
             # Neumann boundary conditions for pressure
-            t_N = Constant((self.problem_data['t_N_expr'][0], self.problem_data['t_N_expr'][1]), degree=4)
-            u_0 = Expression((self.problem_data['u0_expr'][0], self.problem_data['u0_expr'][1]), degree=4)
+            t_N = Constant((self.problem_data['t_N_expr'][0], self.problem_data['t_N_expr'][1]), degree=deg)
+            u_0 = Expression((self.problem_data['u0_expr'][0], self.problem_data['u0_expr'][1]), degree=deg)
 
-            g = Expression(self.problem_data['g_expr'], degree=3)
-            f = Expression(self.problem_data['f_expr'][0], self.problem_data['f_expr'][1], degree=3)
+            g = Expression(self.problem_data['g_expr'], degree=deg)
+            f = Expression(self.problem_data['f_expr'][0], self.problem_data['f_expr'][1], degree=deg)
 
             funcs = dict(p_D_gamma1=p_D_gamma1,
                          p_D_gamma=p_D_gamma,
+                         u_0=u_0,
+                         p_0=p_0,
+                         f=f,
+                         g=g,
+                         t_N=t_N)
+
+        elif self.test_params['test_num'] == 5:
+            # Exact pressure and displacement
+            p_e = Expression(self.problem_data['p_expr'], t=0.0, degree=deg)
+            u_e = Expression((self.problem_data['u_expr'][0], self.problem_data['u_expr'][1], self.problem_data['u_expr'][2]), t=0, degree=deg)
+
+            # Initial condition for pressure and displacement
+            p_0 = Expression(self.problem_data['p0_expr'], degree=deg)
+            u_0 = Expression((self.problem_data['u0_expr'][0], self.problem_data['u0_expr'][1], self.problem_data['u0_expr'][2]), degree=deg)
+
+            # Flow source/sink
+            print(self.problem_data['g_expr'])
+            print(self.material_params['beta'])
+            g = Expression(self.problem_data['g_expr'],
+                           beta=self.material_params['beta'],
+                           alpha=self.material_params['alpha'],
+                           t=0.0, degree=deg)
+
+            # Mechanical load
+            f = Expression((self.problem_data['f_expr'][0], self.problem_data['f_expr'][1], self.problem_data['f_expr'][2]),
+                           mu=self.material_params['mu'],
+                           lmbda=self.material_params['lmbda'],
+                           alpha=self.material_params['alpha'],
+                           t=0.0, degree=deg)
+            t_N = Expression((self.problem_data['t_N_expr'][0], self.problem_data['t_N_expr'][1], self.problem_data['t_N_expr'][2]), degree=deg)
+
+            funcs = dict(u_e=u_e,
+                         p_e=p_e,
                          u_0=u_0,
                          p_0=p_0,
                          f=f,
@@ -1770,8 +1810,11 @@ class TestBiot():
                 p_k1 = Function(func_spaces['Q'])
 
                 # Set initial values of pressure and displacement in iteration procedure
-                p_k = interpolate(Expression("0", degree=3), func_spaces['Q'])
-                u_k = interpolate(Expression(("0", "0"), degree=3), func_spaces['V'])
+                p_k = interpolate(Expression("0", degree=deg), func_spaces['Q'])
+                if gdim == 2:
+                    u_k = interpolate(Expression(("0", "0"), degree=deg), func_spaces['V'])
+                elif gdim == 3:
+                    u_k = interpolate(Expression(("0", "0", "0"), degree=deg), func_spaces['V'])
                 # p_k = interpolate(funcs["p_e"], func_spaces['Q'])
                 # u_k = interpolate(funcs["u_e"], func_spaces['V'])
                 # u_k = u_n
@@ -1866,6 +1909,7 @@ class TestBiot():
             """
         elif self.test_params['test_num'] == 2 or \
                 self.test_params['test_num'] == 4 or \
+                self.test_params['test_num'] == 5 or \
                 self.test_params['test_num'] == 101 or \
                 self.test_params['test_num'] == 102 or \
                 self.test_params['test_num'] == 103 or \
@@ -1940,7 +1984,7 @@ if __name__ == '__main__':
     #resolutions = [8, 16, 32, 64]
     #resolutions = [8, 16, 32, 64]
 
-    resolutions = [4, 8, 16, 32, 64]
+    resolutions = [8, 16, 32, 64]
     #resolutions = [4, 8, 16, 32, 64]
     #resolutions = [16, 32, 64]
     #resolutions = [64]
@@ -1955,15 +1999,15 @@ if __name__ == '__main__':
                            iter_accuracy=1e-4,  # Required accuracy at each interation cycle
                            time_steps=10,  # Number of time steps on the interval [0, t_T]
                            mesh_resolution=resolutions[i],  # Lever of refinement of initial mesh [4, 8, 16, 32, 64, 128]
-                           iter_num=5,
-                           pow=3,
+                           iter_num=7,
+                           pow=5,
                            coupling_approach=iterative_coupling,
                            pressure_recovery_method=CG_method,
                            full_documentation=True,
                            error_format=relative_error,
                            error_estimates=True,
                            majorant_optimisation=True,
-                           majorant_optimization_iterations_number=3,
+                           majorant_optimization_iterations_number=0,
                            test_num=test_num,
                            output=file_output)
 

@@ -115,6 +115,56 @@ def geometry_2d(domain_params, test_num, res):
     # we can send the facet-funtion, which contain the mesh
     return mesh, boundary_parts, h
 
+# Construct 3D geometry
+def geometry_3d(domain_params, test_num, res):
+
+    if domain_params["domain_type"] == "cubic-domain":
+
+        # Define coordinates of a rectangular domain
+        x0 = 0.0
+        x1 = x0 + domain_params["l_x"]
+        y0 = 0.0
+        y1 = y0 + domain_params["l_y"]
+        z0 = 0.0
+        z1 = z0 + domain_params["l_z"]
+
+        # irregular mesh
+        mesh_type = 'crossed'
+        #mesh = RectangleMesh(Point(x0, y0, z0), Point(x1, y1, z1), res, res, res, mesh_type)
+        #mesh = BoxMesh(x0, y0, z0, x1, y1, z1, res, res, res)
+        mesh = BoxMesh(Point(x0, y0, z0), Point(x1, y1, z1), res, res, res)
+
+        # regular mesh
+        #resolution = res
+        #mesh = mshr.generate_mesh(mshr.Rectangle(Point(x0, y0), Point(x1, y1)), resolution)
+
+        # Get boundary facets
+        #boundary_parts = FacetFunction('size_t', mesh) # MeshFunction<T>(mesh, mesh->topology().dim() - 1, 'size_t')
+        boundary_parts = MeshFunction('size_t', mesh, mesh.topology().dim() - 1, 0)
+        h = mesh.hmin()
+        #boundary_parts.set_all(0) # or FacetFunction('size_t', mesh, 0)
+
+        if test_num == 5:
+
+            # Creat parts of the boundary as subdomains
+            left  = AutoSubDomain(lambda x: near(x[0], x0))
+            right = AutoSubDomain(lambda x: near(x[0], x1))
+            bottom  = AutoSubDomain(lambda x: near(x[1], y0))
+            top = AutoSubDomain(lambda x: near(x[1], y1))
+            front = AutoSubDomain(lambda x: near(x[2], z0))
+            back = AutoSubDomain(lambda x: near(x[2], z1))
+
+            # Mark part of the domain with Neumann condition
+            # dy default all Dirichlet part is marked as 0
+            left.mark(boundary_parts, 1)
+            right.mark(boundary_parts, 2)
+            bottom .mark(boundary_parts, 3)
+            top.mark(boundary_parts, 4)
+            front.mark(boundary_parts, 5)
+            back.mark(boundary_parts, 6)
+
+    return mesh, boundary_parts, h
+
 def construct_stiffness_and_mass_matrices(u, v, A, dim):
     # Components of stiffness (K) & mass (M) matrices
     a_K = inner(A * Grad(u, dim), Grad(v, dim)) * dx

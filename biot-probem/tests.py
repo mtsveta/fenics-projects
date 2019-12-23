@@ -462,21 +462,21 @@ def simple_example_2d_t_lubrication_paper_parameters():
     #mu_f = 1                   # fluid viscosity
 
     # set 2
-    k11 = 50.0 * 1e-6
-    k22 = 200.0 * 1e-6
-    min_eig_kappa = 50.0 * 1e-6
-    mu_f = 1e-3
+    # k11 = 50.0 * 1e-6
+    # k22 = 200.0 * 1e-6
+    # min_eig_kappa = 50.0 * 1e-6
+    # mu_f = 1e-3
 
     # set 3
-    #k11 = 50.0 * 1e-10
-    #k22 = 200.0 * 1e-10
-    #min_eig_kappa = 50.0 * 1e-10
-    #mu_f = 1e-3
+    k11 = 50.0 * 1e-10
+    k22 = 200.0 * 1e-10
+    min_eig_kappa = 50.0 * 1e-10
+    mu_f = 1e-3
 
     # set 4
-    #k11 = 50.0 * 1e-15
-    #k22 = 200.0 * 1e-15
-    #min_eig_kappa = 50.0 * 1e-15
+    #k11 = 50.0 * 1e-12
+    #k22 = 200.0 * 1e-12
+    #min_eig_kappa = 50.0 * 1e-12
     #mu_f = 1e-3
 
     #k11 = 50.0 * 1e-6
@@ -492,7 +492,7 @@ def simple_example_2d_t_lubrication_paper_parameters():
     #div_K_grap_p_expr = k11 * p_xx_expr + ' + ' + k22 * p_yy_expr  # 2 * 1e11 * t * (x * (x - 1) + y * (y - 1))
 
     g_expr = 'beta * ' + p_t_expr + '+ alpha * ' + div_u_t_expr \
-             + '- (' + str(k11) + '*' + p_xx_expr + ' + ' + str(k22) + '*' + p_yy_expr + ')'
+             + '- (' + str(1 / mu_f) + ' ) * (' + str(k11) + '*' + p_xx_expr + ' + ' + str(k22) + '*' + p_yy_expr + ')'
              # bet*1e8*x*y*(x - 1)*(y - 1) + alph*(2*x + 1) - 2*t*1e8*x*(x - 1) - 2*t*1e8*y*(y - 1)
 
     # alph*t*1e8 * y*(x - 1)*(y - 1) - 6*mu*t - 2*lmbda*t + alph*1e8 * t*x*y*(y - 1)
@@ -719,7 +719,7 @@ def simple_example_2d_t():
 
 
 def simple_example_3d_t():
-    u0_expr = '(x[0] * x[0] + x[1] * x[1] + x[2]*x[2]) * t'
+    u0_expr = '(x[0] * x[0] + x[1] * x[1] + x[2] * x[2]) * t'
     u0_x_expr = '2*x[0] * t'
     u0_xt_expr = '2*x[0]'
 
@@ -729,7 +729,7 @@ def simple_example_3d_t():
 
     u2_expr = 'sin(t)'
     u2_y_expr = '0'
-    u3_yt_expr = '0'
+    u2_yt_expr = '0'
 
     div_u_expr = u0_x_expr + ' + ' + u1_y_expr      # t*(2*x + 1)
     div_u_t_expr = u0_xt_expr + ' + ' + u1_yt_expr  # 2*x + 1
@@ -743,15 +743,15 @@ def simple_example_3d_t():
     p_zz_expr = '(-2) * x[0] * (1 - x[0]) * x[1] * (1 - x[1]) * t'
     p_t_expr = 'x[0] * (1 - x[0]) * x[1] * (1 - x[1]) * x[2] * (1 - x[2])'
 
-    g_expr = 'alph*(2*x[0] + 1) ' \
+    g_expr = 'alpha*(2*x[0] + 1) ' \
              '+ 2*t*x[0]*x[1]*(x[0] - 1)*(x[1] - 1) ' \
              '+ 2*t*x[0]*x[2]*(x[0] - 1)*(x[2] - 1) ' \
              '+ 2*t*x[1]*x[2]*(x[1] - 1)*(x[2] - 1) ' \
-             '- bet*x[0]*x[1]*x[2]*(x[0] - 1)*(x[1] - 1)*(x[2] - 1)'
-    f_0_expr = '-2*lmbda*t - 6*mu*t - alph*t*x[0]*x[1]*x[2]*(x[1] - 1)*(x[2] - 1) ' \
-               '-alph*t*x[1]*x[2]*(x[0] - 1)*(x[1] - 1)*(x[2] - 1)'
-    f_1_expr = '-alph*t*x[0]*x[2]*(2*x[1] - 1)*(x[0] - 1)*(x[2] - 1)'
-    f_2_expr = '-alph*t*x[0]*x[1]*(2*x[2] - 1)*(x[0] - 1)*(x[1] - 1)'
+             '- beta*x[0]*x[1]*x[2]*(x[0] - 1)*(x[1] - 1)*(x[2] - 1)'
+    f_0_expr = '-2*lmbda*t - 6*mu*t - alpha*t*x[0]*x[1]*x[2]*(x[1] - 1)*(x[2] - 1) ' \
+               '-alpha*t*x[1]*x[2]*(x[0] - 1)*(x[1] - 1)*(x[2] - 1)'
+    f_1_expr = '-alpha*t*x[0]*x[2]*(2*x[1] - 1)*(x[0] - 1)*(x[2] - 1)'
+    f_2_expr = '-alpha*t*x[0]*x[1]*(2*x[2] - 1)*(x[0] - 1)*(x[1] - 1)'
 
     nu = 0.2  # Poinsson's ratio
     E = 1  # Young modulus
@@ -760,35 +760,36 @@ def simple_example_3d_t():
 
     alpha = 1.0
     c_0 = 1e-1
-    K = lmbda + 2 / 3 * mu  # skeleton bulk modulus
-    K_u = K + alpha ** 2 / c_0
+    K = lmbda + 2 / 3 * mu      # Skeleton bulk modulus
+    K_u = K + alpha ** 2 / c_0  #
 
     min_eig_kappa = 1.0
-    c_f = 1 / c_0 * min_eig_kappa * (K + 4 / 3 * mu) / (K_u + 4 / 3 * mu)
+    c_f = 1.0 / c_0 * min_eig_kappa * (K + 4 / 3 * mu) / (K_u + 4 / 3 * mu)
     phi_0 = 0.2
     M = 1e2
     beta = 1 / M + c_f * phi_0
 
     a = 1.0
     b = 1.0
-    C_FD = 1.0 / DOLFIN_PI / sqrt(1.0 / a ** 2 + 1.0 / b ** 2)
+    c = 1.0
+    C_FD = 1.0 / DOLFIN_PI / sqrt(1.0 / a ** 2 + 1.0 / b ** 2 + 1.0 / c ** 2)
 
     # Givien problem data
-    problem_data = dict(u_expr=[u0_expr, u1_expr],  # Exact solution
+    problem_data = dict(u_expr=[u0_expr, u1_expr, u2_expr],  # Exact solution
                         p_expr=p_expr,
                         f_expr=[f_0_expr, f_1_expr, f_2_expr],  # Load function
                         t_T=10.0,  # Final time
                         g_expr=g_expr,  # Source function
-                        t_N_expr=['0.0', '0.0'],
-                        u0_expr=['0.0', '0.0'],
+                        t_N_expr=['0.0', '0.0', '0.0'],
+                        u0_expr=['0.0', '0.0', '0.0'],
                         p0_expr='0.0')
 
     # Domain parameters
-    domain_params = dict(domain_type="rectangular-domain",
+    domain_params = dict(domain_type="cubic-domain",
                          l_x=a,  # a
                          l_y=b,  # b
-                         l_z=0.0,
-                         gdim=2,
+                         l_z=c,  # c
+                         gdim=3,
                          C_FD=C_FD)
 
     # Material parameters
@@ -798,11 +799,11 @@ def simple_example_3d_t():
                            nu=nu,  # Poinsson's ratio
                            alpha=alpha,  # Biot's constant
                            beta=beta,  #
-                           kappa=[[1, 0], [0, 1]],  # permiability
-                           kappa_inv=[[1, 0], [0, 1]],
-                           mu_f=1.0,
-                           c=0.465,
-                           min_eig_kappa=1.0)
+                           kappa=[[1, 0, 0], [0, 1, 0], [0, 0, 1]],  # permiability
+                           kappa_inv=[[1, 0, 0], [0, 1, 0], [0, 0, 1]],
+                           mu_f=1.0, # ?
+                           c=c_f,  # ? = c_f
+                           min_eig_kappa=min_eig_kappa)
 
     return problem_data, domain_params, material_params
 

@@ -25,7 +25,7 @@ def get_project_path():
 # Constructing the name of the result folder based on the problem parameters
 def construct_result_folder_name(dim, test_num, problem_params):
     if problem_params["coupling_approach"] == 'iterative':
-        results_folder_name = '/out-no-min-normalization/%dd/test-%d/iterative/test-%d-v-P%d-p-P%d-flux-RT%d-tau-P%d' \
+        results_folder_name = '/out-3d/%dd/test-%d/iterative/test-%d-v-P%d-p-P%d-flux-RT%d-tau-P%d' \
                               '-nt' \
                               '-%d' \
                               '-nit-%d-meshes-%d/' \
