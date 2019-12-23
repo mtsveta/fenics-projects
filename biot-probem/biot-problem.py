@@ -1157,7 +1157,7 @@ class BiotSolvers():
                   sqrt((2 * (maj_ui_it[last_it] + maj_uh_it[last_it])) / eu_enrg_it[last_it])))
             print("-------------------------------------------------------------------")
             print("[(e_u, e_p)]^2 = %.4e, Mit^2 = %.4e, i_eff(Mit) = %.2f"
-                  % (ep_enrg_it[last_it] + eu_enrg_it[last_it] / max([norm_p_accum[n], norm_u_accum[n]]),
+                  % ((ep_enrg_it[last_it] + eu_enrg_it[last_it]) / max([norm_p_accum[n], norm_u_accum[n]]),
                      2 * (maj_pi_it[last_it] + maj_ph_it[last_it] + maj_ui_it[last_it] + maj_uh_it[last_it]) / max([norm_p_accum[n], norm_u_accum[n]]),
                      sqrt(2 * (maj_pi_it[last_it] + maj_ph_it[last_it] + maj_ui_it[last_it] + maj_uh_it[last_it]) / (ep_enrg_it[last_it] + eu_enrg_it[last_it]))))
             print("-------------------------------------------------------------------")
@@ -1565,7 +1565,8 @@ class TestBiot():
             mesh, facet_function, h = problem.geometry_2d(self.domain_params, self.test_params['test_num'],
                                                           test_params["mesh_resolution"])
         elif self.domain_params['gdim'] == 3:
-            mesh, facet_function, h = problem.geometry_3d(self.domain_params, self.test_params['test_num'])
+            mesh, facet_function, h = problem.geometry_3d(self.domain_params, self.test_params['test_num'],
+                                                          test_params["mesh_resolution"])
         # Get the mesh from facet_function
         # mesh = facet_function.mesh()
 
@@ -1926,8 +1927,9 @@ if __name__ == '__main__':
     # Set the number of the test and call for the problem data
     #test_num = 102
     #test_num = 2
-    test_num = 104
+    #test_num = 104
     #test_num = 102
+    test_num = 5
 
     #resolutions = [16]
     #resolutions = [64]
@@ -1951,7 +1953,7 @@ if __name__ == '__main__':
                            flux_approx_order=2,
                            stress_approx_order=2,
                            iter_accuracy=1e-4,  # Required accuracy at each interation cycle
-                           time_steps=100,  # Number of time steps on the interval [0, t_T]
+                           time_steps=10,  # Number of time steps on the interval [0, t_T]
                            mesh_resolution=resolutions[i],  # Lever of refinement of initial mesh [4, 8, 16, 32, 64, 128]
                            iter_num=5,
                            pow=3,
@@ -1961,7 +1963,7 @@ if __name__ == '__main__':
                            error_format=relative_error,
                            error_estimates=True,
                            majorant_optimisation=True,
-                           majorant_optimization_iterations_number=0,
+                           majorant_optimization_iterations_number=3,
                            test_num=test_num,
                            output=file_output)
 
