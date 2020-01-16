@@ -15,6 +15,7 @@ import tests, problem, postprocess
 
 # https://fenicsproject.org/olddocs/dolfin/1.3.0/python/programmers-reference/fem/solving/solve.html
 # https://fenicsproject.org/pub/tutorial/sphinx1/._ftut1006.html#ftut-app-solver-prec
+# preconditioning: https://fenicsproject.org/olddocs/dolfin/1.3.0/python/programmers-reference/fem/solving/solve.html
 
 parameters['form_compiler']['optimize'] = True
 parameters['form_compiler']['cpp_optimize'] = True
@@ -442,7 +443,7 @@ class ErrorControl():
                 # Define the optimal system for the flux reconstruction
                 yMatrix = C_FD ** 2 / funcs["min_eig_kappa"] * S + beta * K
                 yRhs = C_FD ** 2 / funcs["min_eig_kappa"] * z + beta * g
-                solve(yMatrix, Y, yRhs, solver_parameters={'linear_solver' : 'mumps'})
+                solve(yMatrix, Y, yRhs,'mumps')
                 y.vector = Y
                 maj, m_d, m_f, beta, var_m_d, var_m_f_w_opt = \
                     self.calculate_majorant_bar_mu_opt(p, y, beta, C_FD,
@@ -494,7 +495,7 @@ class ErrorControl():
                 # Define the optimal system for the flux reconstruction
                 yMatrix = C_FD ** 2 / funcs["min_eig_kappa"] * S + beta * K
                 yRhs = C_FD ** 2 / funcs["min_eig_kappa"] * z + beta * g
-                solve(yMatrix, Y, yRhs,  solver_parameters={'linear_solver' : 'mumps'})
+                solve(yMatrix, Y, yRhs, 'mumps')
                 y.vector = Y
                 maj, m_d, m_f, beta, var_m_d, var_m_f_w_opt = \
                     self.calculate_majorant_bar_mu_opt(p, y, beta, C_FD, f, funcs["kappa"], funcs["min_eig_kappa"], funcs["react"])
@@ -516,14 +517,14 @@ class ErrorControl():
         epsilon = lambda v: 0.5 * (nabla_grad(v) + nabla_grad(v).T)
         sigma = lambda v: 2 * mu * epsilon(v) + lmbda * div(v) * Identity(self.gdim)
         #y = project(sigma(interpolate(u_e, self.VVe)), func_spaces["H_Div"])
-
+        y = Function(func_spaces["H_Div"])
         #'''
         # Define test functions for mechanics and flow equations
         tau_test = TestFunction(func_spaces['H_Div'])
         y_trial = TrialFunction(func_spaces['H_Div'])
-        a_project = assemble(inner(y_trial, tau_test) * dx)
-        l_project = assemble(inner(sigma(interpolate(u_e, self.VVe)), tau_test) * dx)
-        solve(a_project, y.vector(), l_project, solver_parameters={'linear_solver': 'mumps'})
+        a_project = assemble(tr(inner(y_trial, tau_test)) * dx)
+        l_project = assemble(tr(inner(sigma(interpolate(u_e, self.VVe)), tau_test)) * dx)
+        solve(a_project, y.vector(), l_project, 'mumps')
         #'''
         # beta is the reaction fucntion
         maj, m_d, m_f, beta, var_m_d, var_m_f = \
@@ -542,7 +543,6 @@ class ErrorControl():
             S, K, z, g = self.get_matrices_of_optimization_problem(func_spaces["H_Div"], u, F, mu, lmbda)
 
             y = Function(func_spaces["H_Div"])
-            Y = y.vector()
 
             old_maj = DOLFIN_EPS
 
@@ -551,8 +551,7 @@ class ErrorControl():
                 yMatrix = C_K ** 2 * S + beta * K
                 yRhs = C_K ** 2 * z + beta * g
 
-                solve(yMatrix, Y, yRhs,  solver_parameters={'linear_solver' : 'mumps'})
-                y.vector = Y
+                solve(yMatrix, y.vector(), yRhs, 'mumps')
 
                 # Calculate majorant
                 maj, m_d, m_f, beta, var_m_d, var_m_f = \
@@ -602,7 +601,7 @@ class ErrorControl():
                 yMatrix = C_K ** 2 * S + beta * K
                 yRhs = C_K ** 2 * z + beta * g
 
-                solve(yMatrix, Y, yRhs,  solver_parameters={'linear_solver' : 'mumps'})
+                solve(yMatrix, Y, yRhs, 'mumps')
                 y.vector = Y
 
                 # Calculate majorant
@@ -895,7 +894,8 @@ class BiotSolvers():
 
             # Assemble the system to solve flow equation for pressure
             A_p, b_p = assemble_system(a_p_var, l_p_var, bc_p)
-            solve(A_p, p_i1.vector(), b_p,  solver_parameters={'linear_solver' : 'mumps'})
+            #solve(A_p, p_i1.vector(), b_p, 'mumps')
+            solve(A_p, p_i1.vector(), b_p, 'mumps')
             # solve(A_p, p_k1.vector(), b_p, "gmres", "hypre_amg")
 
             # Calculate the error in the pressure term
@@ -912,7 +912,7 @@ class BiotSolvers():
 
             # Assemble the system to solve mechanics equation for displacement
             A_u, b_u = assemble_system(a_u_var, l_u_var, bc_u)
-            solve(A_u, u_i1.vector(), b_u,  solver_parameters={'linear_solver' : 'mumps'})
+            solve(A_u, u_i1.vector(), b_u, 'mumps')
 
             # TODO: add here print out of inc_p = || p^{k+1} - p^k ||_l2 and inc_u = || u^{k+1} - u^k ||_l2
             # TODO: add the exiting criterion based on the inc_p, inc_u <= 1e-8
@@ -1288,7 +1288,7 @@ class BiotSolvers():
         biot_rhs = (inner(funcs["f"], v) + inner(g_tilde, theta)) * dx
 
         # Solve the Biot system
-        solve(biot_lhs == biot_rhs, w_n1, bcs, solver_parameters={'linear_solver' : 'mumps'})
+        solve(biot_lhs == biot_rhs, w_n1, bcs,'mumps')
         u_n1, p_n1 = w_n1.split()
 
         # Calculate the error in the pressure term
@@ -1351,7 +1351,11 @@ class TestBiot():
 
         # Assemble the system for the initial pressure
         A_p0, b_p0 = assemble_system(a_p0, l_p0, bc_p)
-        solve(A_p0, p_k.vector(), b_p0,  solver_parameters={'linear_solver' : 'mumps'})
+
+        # Create Direct solver
+        #solver = LinearVariationalSolver(krylov_method, "amg")
+
+        solve(A_p0, p_k.vector(), b_p0,  'mumps')
 
         epsilon = lambda v: 0.5 * (nabla_grad(v) + nabla_grad(v).T)
         sigma = lambda v: 2 * mu * epsilon(v) + lmbda * div(v) * Identity(self.self.domain_params['gdim'])
@@ -1362,7 +1366,7 @@ class TestBiot():
 
         # Assemble the system for initial displacement
         A_u0, b_u0 = assemble_system(a_u0, l_u0, bc_u)
-        solve(A_u0, u_k.vector(), b_u0,  solver_parameters={'linear_solver' : 'mumps'})
+        solve(A_u0, u_k.vector(), b_u0, 'mumps')
 
         return p_k, u_k
 
@@ -1973,7 +1977,8 @@ if __name__ == '__main__':
     #test_num = 2
     #test_num = 104
     #test_num = 102
-    test_num = 5
+    #test_num = 5
+    test_num = 102
 
     #resolutions = [16]
     #resolutions = [64]
@@ -1984,8 +1989,8 @@ if __name__ == '__main__':
     #resolutions = [8, 16, 32, 64]
     #resolutions = [8, 16, 32, 64]
 
-    resolutions = [8, 16, 32, 64]
-    #resolutions = [4, 8, 16, 32, 64]
+    #resolutions = [4, 8, 16, 32]
+    resolutions = [4, 8, 16, 32, 64]
     #resolutions = [16, 32, 64]
     #resolutions = [64]
     #resolutions = [16]
@@ -1999,8 +2004,8 @@ if __name__ == '__main__':
                            iter_accuracy=1e-4,  # Required accuracy at each interation cycle
                            time_steps=10,  # Number of time steps on the interval [0, t_T]
                            mesh_resolution=resolutions[i],  # Lever of refinement of initial mesh [4, 8, 16, 32, 64, 128]
-                           iter_num=7,
-                           pow=5,
+                           iter_num=3,
+                           pow=2,
                            coupling_approach=iterative_coupling,
                            pressure_recovery_method=CG_method,
                            full_documentation=True,
@@ -2015,4 +2020,3 @@ if __name__ == '__main__':
 
         test = TestBiot(problem_data, domain_params, material_params, test_params)
         test.test_biot(test_params, project_path)
-        

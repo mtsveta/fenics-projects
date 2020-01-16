@@ -295,11 +295,12 @@ def simple_example_2_2d_t_EGPa_K100():
         lmbda = 2 * lmbda * mu / (lmbda + 2 * mu)
 
     alpha = 1.0
-    c_0 = 1e-1
-    K = lmbda + 2 / 3 * mu  # skeleton bulk modulus
-    K_u = K + alpha ** 2 / c_0
+    #c_0 = 1e-1
+    #K = lmbda + 2 / 3 * mu  # skeleton bulk modulus
+    #K_u = K + alpha ** 2 / c_0
 
-    c_f = 1 / c_0 * min_eig_kappa * (K + 4 / 3 * mu) / (K_u + 4 / 3 * mu)
+    c_f = 4.7 * 1e-7
+    #c_f = 1 / c_0 * min_eig_kappa * (K + 4 / 3 * mu) / (K_u + 4 / 3 * mu)
     phi_0 = 0.2
     M = 1.65e10
     beta = 1 / M + c_f * phi_0
